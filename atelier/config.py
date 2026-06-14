@@ -30,6 +30,10 @@ INSIGHTFACE_DET_SIZE = 640   # SCRFD standard; larger can MISS frame-filling fac
 # "arcface"  = insightface buffalo_l ArcFace embedding (default, unchanged behavior).
 # "adaface"  = mk-minchul AdaFace IR-101 / WebFace12M (quality-adaptive; better on
 #              low-quality / varied-pose wedding faces). See atelier/recognition.py.
+# A/B on a real 1798-img reception: AdaFace gave equal cluster count (~252 vs 251)
+# and only +0.02 silhouette at ~25% slower — its edge is low-quality faces, which
+# detection already gates out here. ArcFace (CoreML) stays default; flip for sets
+# dominated by blurry/backlit faces, then re-index.
 RECOGNITION_MODEL = "arcface"   # or "adaface"
 
 # Quality gates applied at index time (reject non-faces before they ever cluster):
