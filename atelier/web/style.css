@@ -295,6 +295,7 @@ h3 {
   gap: 2px;
   height: 190px;
   background: var(--stage);
+  overflow: hidden; /* clip extra mosaic tiles so they never bleed over the text */
 }
 .cover img {
   width: 100%;
@@ -315,6 +316,9 @@ h3 {
 }
 .proj-body {
   padding: 18px 20px 20px;
+  position: relative; /* sit above the cover on its own solid panel — always readable */
+  z-index: 1;
+  background: var(--panel);
 }
 .proj-body h3 {
   font-size: 22px;
@@ -360,7 +364,7 @@ h3 {
 }
 .proj-foot .del {
   margin-left: auto;
-  color: var(--faint);
+  color: var(--ink-dim);
   background: none;
   border: none;
   cursor: pointer;

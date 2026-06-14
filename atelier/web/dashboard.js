@@ -22,7 +22,7 @@ export async function renderDashboard() {
     const s = p.stats || {};
     const cover = (p.cover || []).length
       ? `<div class="cover">${p.cover
-          .slice(0, 5)
+          .slice(0, 3)
           .map(
             (id) =>
               `<img loading="lazy" src="/api/p/${p.slug}/image_thumb/${id}" alt="Photo from ${escapeHtml(p.name)}">`,
