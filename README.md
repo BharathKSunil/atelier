@@ -1,10 +1,33 @@
-# Photo Face Indexer
+# Atelier
+
+Local-first photo culling for photographers — group faces by person and pick the best frame of every burst, without touching a single original.
+
+![ci](https://img.shields.io/github/actions/workflow/status/bharathksunil/atelier/ci.yml?label=ci)
+![license](https://img.shields.io/badge/license-MIT-blue)
+![python](https://img.shields.io/badge/python-3.11%2B-blue)
 
 Browse a large local photo library by **person** and pick the **best frame of each burst for printing** — without renaming, moving, or modifying any original file. Everything stays local (SQLite, no cloud).
 
 Two use-cases:
 1. **Group by name** — detect + cluster faces, label people, browse their photos.
 2. **Best of a series, for print** — group near-identical shots (bursts), score whole-frame print quality (group-aware: one blink disqualifies a frame), pick the single best to print.
+
+## Platform support
+
+| Platform | Status | Notes |
+|----------|--------|-------|
+| macOS (Apple Silicon) | ✅ Primary, fully supported | CoreML/MPS acceleration, native folder picker, Reveal in Finder |
+| macOS (Intel) | ✅ Supported | CPU/CoreML; slower without MPS |
+| Linux | ⚠️ Best-effort | Pipeline + web UI work on CPU/CUDA. The native folder picker, "Reveal in Finder", `make open`, and the MPS check do not — paste a folder path in the New Project dialog and run the server via `make serve` / the CLI. |
+| Windows | ❌ Untested | Not supported; `make stop`/`make open` rely on `lsof`/`open`. |
+
+The face/recognition stack (`hdbscan`, `insightface`, `mediapipe`) ships prebuilt wheels only for some OS/Python combinations — use **Python 3.11 or 3.12**. On first index, Atelier downloads ~350–600 MB of models (`buffalo_l`, DINOv2, and optionally AdaFace) and **needs internet once**; everything else stays local.
+
+> The server is loopback-only (`127.0.0.1`) and unauthenticated. Do not expose it to a network.
+
+### First run & models
+
+The first index downloads `buffalo_l` (~280 MB, insightface) and DINOv2 (~85 MB, via `torch.hub`), plus AdaFace (~250 MB) only when `RECOGNITION_MODEL="adaface"`. Weights are cached under `~/.insightface` and the torch hub cache, so subsequent runs are offline — but the **first index needs internet**.
 
 ## Pipeline
 
@@ -53,7 +76,7 @@ Common vars: `PROJECTS_DIR=projects`, `PORT=5050`, `PHOTOS=/path`, `DB=`. Server
 ## Setup (manual)
 
 ```bash
-cd wedding-photos
+cd atelier  # or your clone directory
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt          # full pipeline (torch, mediapipe, ...)
 python -c "import torch; print('MPS:', torch.backends.mps.is_available())"   # want: True
@@ -95,7 +118,7 @@ Re-cluster persons or regroup series anytime by re-running phase 2 / 2b — the 
 ### Face engine (detection + recognition)
 
 Default backend is **insightface** — RetinaFace detection + ArcFace embeddings (`buffalo_l`, auto-downloads). This fixes the two failure modes of the old MTCNN+FaceNet stack:
-- **False positives** (jewelry, hands, hair, skin tagged as people) — rejected by the detector confidence gate `FACE_DET_THRESHOLD` (0.60).
+- **False positives** (jewelry, hands, hair, skin tagged as people) — rejected by the detector confidence gate `FACE_DET_THRESHOLD` (0.65).
 - **Junk/duplicate clusters** — ArcFace separates identities far better (same-person cosine ~0.98 vs different ~0.15; FaceNet gave ~0.51), so HDBSCAN over-splits and false-merges much less.
 
 Index-time gates in `atelier/config.py`: `FACE_DET_THRESHOLD`, `FACE_MIN_PX`, `FACE_MIN_SHARPNESS`. Set `FACE_BACKEND="mtcnn"` to fall back.

@@ -26,5 +26,5 @@ description = "Phase 3 — score quality, pick best face + best print frame"
 run = "python -m atelier.pipeline.score --db faces.db"
 
 [tasks.serve]
-description = "Phase 4 — web UI at localhost:5000"
-run = "python -m atelier.server --db faces.db --port 5000"
+description = "Phase 4 — web UI at localhost:5050"
+run = "python -m atelier.server --projects-dir ~/.atelier --port 5050"

@@ -1,3 +1,8 @@
+> **Historical design note — superseded.** Documents an earlier architecture
+> (the `facelib/` package, `01_index.py`…`04_server.py` scripts, MTCNN+FaceNet).
+> The shipped tool is the `atelier` package with `atelier.pipeline.*` and an
+> insightface/ArcFace stack. See the top-level `README.md` for current behavior.
+
 # Photo Face Indexer — Implementation Plan
 
 **Goal:** Browse a 20k+ local photo library by person, and pick the best frame of each burst for printing — no originals modified, fully local.

@@ -2,8 +2,8 @@
 """Seed a synthetic demo DB so the web UI can be viewed without running the
 model pipeline. Draws fake faces + bursts with PIL (no torch/mediapipe).
 
-  python demo_seed.py --db demo.db --photos ./demo_photos
-  python 04_server.py --db demo.db
+  python -m atelier.demo_seed --db demo.db --photos ./demo_photos
+  python -m atelier.server --projects-dir ~/.atelier
 """
 import argparse
 import io

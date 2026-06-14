@@ -1,12 +1,18 @@
-# Photo Face Indexer — task runner
+# Atelier — task runner
 # Override vars inline, e.g.:  make index PHOTOS=/Volumes/Photos
 #                             make start DB=faces.db PORT=5050
 
+# NOTE: keep comments on their OWN lines — a trailing `# ...` after a `?=` value
+# becomes part of the value (e.g. PROJECTS_DIR would gain trailing spaces and
+# point at "~/.atelier   " instead of "~/.atelier").
+
+# avoid 5000/7000 — macOS AirPlay Receiver binds those (returns 403)
+PORT   ?= 5050
 DB     ?= faces.db
-PORT   ?= 5050   # avoid 5000/7000 — macOS AirPlay Receiver binds those (returns 403)
 PHOTOS ?=
 PHOTOS_DIR ?= ./demo_photos
-PROJECTS_DIR ?= $(HOME)/.atelier   # project storage root (override with ATELIER_HOME too)
+# project storage root (override with ATELIER_HOME too)
+PROJECTS_DIR ?= $(HOME)/.atelier
 
 PYTHON := .venv/bin/python
 PIP    := .venv/bin/pip
@@ -20,7 +26,8 @@ LOGFILE := server.log
 install: ## Create venv (mise) + install full pipeline deps (torch, mediapipe, ...)
 	mise install
 	$(PIP) install -q -r requirements.txt
-	@echo "✓ pipeline deps installed"
+	$(PIP) install -q -e .
+	@echo "✓ pipeline deps + atelier CLI installed"
 
 .PHONY: install-dev
 install-dev: ## Create venv (mise) + install light test deps only
