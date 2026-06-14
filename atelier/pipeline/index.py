@@ -8,6 +8,7 @@ Per image:
   downscaled -> insightface RetinaFace/SCRFD detect + ArcFace 512-d embed
                 (quality-gated) + DINOv2 384-d global embed for burst grouping
 """
+
 import argparse
 import io
 import os
@@ -42,8 +43,9 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--photos", required=True, help="Root folder of nested photos")
     ap.add_argument("--db", default="faces.db")
-    ap.add_argument("--retry-errors", action="store_true",
-                    help="Re-process images previously marked as errored (processed=2)")
+    ap.add_argument(
+        "--retry-errors", action="store_true", help="Re-process images previously marked as errored (processed=2)"
+    )
     ap.add_argument("--det-threshold", type=float, default=config.FACE_DET_THRESHOLD)
     ap.add_argument("--min-px", type=int, default=config.FACE_MIN_PX)
     ap.add_argument("--min-sharpness", type=float, default=config.FACE_MIN_SHARPNESS)
@@ -80,8 +82,11 @@ def main():
             # idempotent re-index: clear this image's faces (and any stale override
             # anchors on them — face ids are reassigned on re-insert, and the FK would
             # otherwise block the delete).
-            cur.execute("""DELETE FROM person_overrides WHERE face_id IN
-                           (SELECT id FROM faces WHERE image_id=?)""", (iid,))
+            cur.execute(
+                """DELETE FROM person_overrides WHERE face_id IN
+                           (SELECT id FROM faces WHERE image_id=?)""",
+                (iid,),
+            )
             cur.execute("DELETE FROM faces WHERE image_id=?", (iid,))
             img = imaging.load_rgb(path)
             W, H = img.size
@@ -113,50 +118,74 @@ def main():
                     continue
                 kps = d.get("kps")
                 if kps is not None and quality.frontality(kps[0], kps[1], kps[2]) < min_front:
-                    continue                         # drop profiles / ears (unreliable embedding)
+                    continue  # drop profiles / ears (unreliable embedding)
                 # Non-face filters apply ONLY to borderline detections; SCRFD >= 0.80 is
                 # trusted (keeps real profiles/odd crops). Hair/fabric sit at 0.65-0.80.
                 if d["score"] < config.FACE_DET_AUTO_ACCEPT:
-                    if not (0.6 <= w / max(h, 1e-6) <= 1.7):                 # faces ~square-ish
+                    if not (0.6 <= w / max(h, 1e-6) <= 1.7):  # faces ~square-ish
                         continue
                     if kps is not None and not quality.kps_plausible(kps, d["bbox"]):
-                        continue                     # impossible eye/nose/mouth layout
-                    if (config.FACE_VERIFY_LANDMARKS
-                            and not landmarks.has_face(np.asarray(_pad_crop(small, d["bbox"])))):
-                        continue                     # MediaPipe second opinion: no face here
+                        continue  # impossible eye/nose/mouth layout
+                    if config.FACE_VERIFY_LANDMARKS and not landmarks.has_face(np.asarray(_pad_crop(small, d["bbox"]))):
+                        continue  # MediaPipe second opinion: no face here
                 crop, (ox1, oy1, ox2, oy2) = _crop_full(img, d["bbox"], scale)
                 if crop is None:
                     continue
                 fraw = quality.laplacian_var(imaging.to_gray_array(crop))
                 if quality.squash_sharpness(fraw) < min_sharp:
-                    continue                         # drop out-of-focus blobs
+                    continue  # drop out-of-focus blobs
                 thumb = crop.copy()
                 thumb.thumbnail((config.THUMB_MAX, config.THUMB_MAX))
                 buf = io.BytesIO()
                 thumb.save(buf, "JPEG", quality=85)
-                face_rows.append((ox1, oy1, ox2, oy2, d["score"],
-                                  d["embedding"].tobytes(), buf.getvalue(),
-                                  quality.norm_sharpness(fraw), fraw))
+                face_rows.append(
+                    (
+                        ox1,
+                        oy1,
+                        ox2,
+                        oy2,
+                        d["score"],
+                        d["embedding"].tobytes(),
+                        buf.getvalue(),
+                        quality.norm_sharpness(fraw),
+                        fraw,
+                    )
+                )
 
             cur.execute(
                 """UPDATE images SET file_size=?, width=?, height=?, taken_at=?, exif_time=?,
                    sub_sec=?, camera=?, orientation=?, global_embedding=?, global_sharpness=?,
                    global_sharpness_raw=?, exposure_score=?, thumbnail=?, face_count=?,
                    processed=1, error_msg=NULL WHERE id=?""",
-                (os.path.getsize(path), W, H, taken_at, 1 if exif_time else 0, sub_sec, camera,
-                 orient, gemb.tobytes(), gsharp, graw, expo, ibuf.getvalue(), len(face_rows), iid),
+                (
+                    os.path.getsize(path),
+                    W,
+                    H,
+                    taken_at,
+                    1 if exif_time else 0,
+                    sub_sec,
+                    camera,
+                    orient,
+                    gemb.tobytes(),
+                    gsharp,
+                    graw,
+                    expo,
+                    ibuf.getvalue(),
+                    len(face_rows),
+                    iid,
+                ),
             )
             for fi, fr in enumerate(face_rows):
                 cur.execute(
                     """INSERT INTO faces(image_id, face_index, bbox_x1, bbox_y1, bbox_x2,
                        bbox_y2, confidence, embedding, thumbnail, face_sharpness, face_sharpness_raw)
                        VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
-                    (iid, fi, *fr))
+                    (iid, fi, *fr),
+                )
             conn.commit()
         except Exception as e:  # noqa: BLE001 — record and continue, stay resumable
             conn.rollback()
-            cur.execute("UPDATE images SET processed=2, error_msg=? WHERE id=?",
-                        (str(e)[:500], iid))
+            cur.execute("UPDATE images SET processed=2, error_msg=? WHERE id=?", (str(e)[:500], iid))
             conn.commit()
 
     done = cur.execute("SELECT COUNT(*) n FROM images WHERE processed=1").fetchone()["n"]

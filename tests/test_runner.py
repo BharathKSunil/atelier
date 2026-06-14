@@ -1,5 +1,6 @@
 """Runner machinery tests: per-run log file, runs-table history, error capture,
 and restart reconciliation. Uses a fake subprocess so no ML stack is needed."""
+
 import os
 import time
 
@@ -27,8 +28,7 @@ def _wait(r, timeout=5):
 
 
 def test_runner_records_run_and_writes_log(tmp_path, monkeypatch):
-    monkeypatch.setattr(runner.subprocess, "Popen",
-                        lambda *a, **k: FakeProc(["hello", "world"], 0))
+    monkeypatch.setattr(runner.subprocess, "Popen", lambda *a, **k: FakeProc(["hello", "world"], 0))
     db_path = str(tmp_path / "db.sqlite")
     db.init_db(db_path).close()
     r = runner.Runner(db_path, log_path=str(tmp_path / "run.log"), runs_dir=str(tmp_path / "runs"))
@@ -45,8 +45,11 @@ def test_runner_records_run_and_writes_log(tmp_path, monkeypatch):
 
 
 def test_failed_phase_captures_traceback(tmp_path, monkeypatch):
-    monkeypatch.setattr(runner.subprocess, "Popen",
-                        lambda *a, **k: FakeProc(["Traceback (most recent call last):", "ValueError: boom"], 1))
+    monkeypatch.setattr(
+        runner.subprocess,
+        "Popen",
+        lambda *a, **k: FakeProc(["Traceback (most recent call last):", "ValueError: boom"], 1),
+    )
     db_path = str(tmp_path / "db.sqlite")
     db.init_db(db_path).close()
     r = runner.Runner(db_path, runs_dir=str(tmp_path / "runs"))
@@ -58,8 +61,7 @@ def test_failed_phase_captures_traceback(tmp_path, monkeypatch):
 
 
 def test_log_lines_cursor(tmp_path, monkeypatch):
-    monkeypatch.setattr(runner.subprocess, "Popen",
-                        lambda *a, **k: FakeProc(["a", "b"], 0))
+    monkeypatch.setattr(runner.subprocess, "Popen", lambda *a, **k: FakeProc(["a", "b"], 0))
     db_path = str(tmp_path / "db.sqlite")
     db.init_db(db_path).close()
     r = runner.Runner(db_path, runs_dir=str(tmp_path / "runs"))
@@ -68,7 +70,7 @@ def test_log_lines_cursor(tmp_path, monkeypatch):
     alllines = r.log_lines(since=0)
     assert alllines, "expected log lines"
     last = alllines[-1][0]
-    assert r.log_lines(since=last) == []   # nothing past the cursor
+    assert r.log_lines(since=last) == []  # nothing past the cursor
 
 
 def test_reconcile_marks_running_as_interrupted(tmp_path):

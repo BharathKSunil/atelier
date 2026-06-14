@@ -9,8 +9,7 @@ def test_init_creates_tables():
     os.close(fd)
     try:
         conn = db.init_db(path)
-        names = {r[0] for r in conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='table'")}
+        names = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
         assert {"images", "faces", "persons", "series"} <= names
     finally:
         conn.close()

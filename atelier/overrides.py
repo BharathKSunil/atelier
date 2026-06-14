@@ -4,6 +4,7 @@ Anchored on faces.id — the only key stable across re-runs (persons.id is the r
 HDBSCAN label and is rebuilt every clustering pass). A `group_key` denotes one
 forced identity. apply_overrides() re-imposes that intent after HDBSCAN runs.
 """
+
 import time
 import uuid
 
@@ -17,9 +18,14 @@ def _face_ids_of_person(conn, pid):
 
 
 def _group_keys_of_person(conn, pid):
-    return [r[0] for r in conn.execute(
-        """SELECT DISTINCT o.group_key FROM person_overrides o
-           JOIN faces f ON f.id=o.face_id WHERE f.person_id=?""", (pid,))]
+    return [
+        r[0]
+        for r in conn.execute(
+            """SELECT DISTINCT o.group_key FROM person_overrides o
+           JOIN faces f ON f.id=o.face_id WHERE f.person_id=?""",
+            (pid,),
+        )
+    ]
 
 
 def _write_rows(conn, face_ids, group_key, kind, name):
@@ -29,7 +35,8 @@ def _write_rows(conn, face_ids, group_key, kind, name):
            VALUES(?,?,?,?,?)
            ON CONFLICT(face_id) DO UPDATE SET group_key=excluded.group_key,
              kind=excluded.kind, display_name=excluded.display_name""",
-        [(fid, group_key, kind, name, now) for fid in face_ids])
+        [(fid, group_key, kind, name, now) for fid in face_ids],
+    )
 
 
 def merge_persons(conn, from_pid, into_pid, name=None):
@@ -48,8 +55,9 @@ def merge_persons(conn, from_pid, into_pid, name=None):
     # person on the next re-cluster — the merge silently reverts.
     for old_gk in _group_keys_of_person(conn, from_pid):
         if old_gk != gk:
-            conn.execute("UPDATE person_overrides SET group_key=?, display_name=? WHERE group_key=?",
-                         (gk, name, old_gk))
+            conn.execute(
+                "UPDATE person_overrides SET group_key=?, display_name=? WHERE group_key=?", (gk, name, old_gk)
+            )
     _write_rows(conn, faces, gk, "merge", name)
     conn.execute("UPDATE faces SET person_id=? WHERE person_id=?", (into_pid, from_pid))
     conn.execute("DELETE FROM persons WHERE id=?", (from_pid,))
@@ -79,8 +87,7 @@ def split_person(conn, face_ids, name=None):
     gk = new_group_key()
     _write_rows(conn, face_ids, gk, "split", name)
     nid = (conn.execute("SELECT COALESCE(MAX(id), -1) FROM persons").fetchone()[0]) + 1
-    conn.execute("INSERT OR IGNORE INTO persons(id, display_name) VALUES(?,?)",
-                 (nid, name or f"Person {nid}"))
+    conn.execute("INSERT OR IGNORE INTO persons(id, display_name) VALUES(?,?)", (nid, name or f"Person {nid}"))
     placeholders = ",".join("?" * len(face_ids))
     conn.execute(f"UPDATE faces SET person_id=? WHERE id IN ({placeholders})", [nid, *face_ids])
     conn.commit()
@@ -107,6 +114,7 @@ def similar_faces_in_person(conn, face_id, person_id, threshold=0.5, limit=60):
     """Faces in `person_id` whose ArcFace embedding is within `threshold` cosine of
     `face_id`. For 'remove similar' visual review. Returns [(id, cosine)] desc."""
     import numpy as np
+
     row = conn.execute("SELECT embedding FROM faces WHERE id=?", (face_id,)).fetchone()
     if not row or not row["embedding"]:
         return []
@@ -114,8 +122,8 @@ def similar_faces_in_person(conn, face_id, person_id, threshold=0.5, limit=60):
     q = q / (np.linalg.norm(q) + 1e-9)
     out = []
     for r in conn.execute(
-            "SELECT id, embedding FROM faces WHERE person_id=? AND id!=? AND embedding IS NOT NULL",
-            (person_id, face_id)):
+        "SELECT id, embedding FROM faces WHERE person_id=? AND id!=? AND embedding IS NOT NULL", (person_id, face_id)
+    ):
         e = np.frombuffer(r["embedding"], dtype=np.float32)
         cos = float(np.dot(q, e / (np.linalg.norm(e) + 1e-9)))
         if cos >= threshold:
@@ -155,7 +163,7 @@ def apply_overrides(conn):
 
     next_id = (conn.execute("SELECT COALESCE(MAX(id), -1) FROM persons").fetchone()[0]) + 1
     used_targets = set()
-    for gk, g in groups.items():
+    for _gk, g in groups.items():
         if g["kind"] == "reject":
             continue
         fids = g["faces"]
@@ -165,7 +173,9 @@ def apply_overrides(conn):
             row = conn.execute(
                 f"""SELECT person_id, COUNT(*) c FROM faces
                     WHERE id IN ({ph}) AND person_id>=0
-                    GROUP BY person_id ORDER BY c DESC LIMIT 1""", fids).fetchone()
+                    GROUP BY person_id ORDER BY c DESC LIMIT 1""",
+                fids,
+            ).fetchone()
             if row and row["person_id"] not in used_targets:
                 target = row["person_id"]
         if target is None:
@@ -173,8 +183,9 @@ def apply_overrides(conn):
             next_id += 1
         used_targets.add(target)
         conn.execute(f"UPDATE faces SET person_id=? WHERE id IN ({ph})", [target, *fids])
-        conn.execute("INSERT OR IGNORE INTO persons(id, display_name) VALUES(?,?)",
-                     (target, g["name"] or f"Person {target}"))
+        conn.execute(
+            "INSERT OR IGNORE INTO persons(id, display_name) VALUES(?,?)", (target, g["name"] or f"Person {target}")
+        )
         if g["name"]:
             conn.execute("UPDATE persons SET display_name=? WHERE id=?", (g["name"], target))
     conn.commit()

@@ -3,6 +3,7 @@
 Old:  <src>/registry.json, <src>/<slug>.db (+ -wal/-shm), <src>/<slug>.log
 New:  <dst>/registry.json, <dst>/<slug>/db.sqlite (+ sidecars), <dst>/<slug>/run.log
 """
+
 import json
 import os
 import shutil
@@ -15,7 +16,7 @@ def migrate_flat_to_nested(src, dst):
     if not os.path.exists(src_reg):
         return 0
     if os.path.exists(os.path.join(dst, "registry.json")):
-        return 0   # already migrated
+        return 0  # already migrated
     try:
         with open(src_reg) as f:
             items = json.load(f)
@@ -32,7 +33,7 @@ def migrate_flat_to_nested(src, dst):
         os.makedirs(out_dir, exist_ok=True)
         flat_db = os.path.join(src, f"{slug}.db")
         if os.path.exists(flat_db):
-            try:                                   # flush WAL so the copy isn't lossy
+            try:  # flush WAL so the copy isn't lossy
                 c = sqlite3.connect(flat_db)
                 c.execute("PRAGMA wal_checkpoint(TRUNCATE)")
                 c.close()

@@ -14,7 +14,7 @@ def _seed(path):
 
 def test_merge_survives_recluster(tmp_path):
     c = _seed(str(tmp_path / "m.db"))
-    overrides.merge_persons(c, 1, 0)            # merge Bob into Alice
+    overrides.merge_persons(c, 1, 0)  # merge Bob into Alice
     assert {r[0] for r in c.execute("SELECT DISTINCT person_id FROM faces")} == {0}
     # simulate a re-cluster scattering the faces, then re-apply intent
     c.execute("UPDATE faces SET person_id=7 WHERE id IN (1,2)")
@@ -31,9 +31,9 @@ def test_chained_merge_keeps_orphaned_faces_together(tmp_path):
     for fid in (5, 6):
         c.execute("INSERT INTO faces(id, image_id, person_id) VALUES(?,1,2)", (fid,))
     c.commit()
-    overrides.merge_persons(c, 1, 0)                        # Bob -> Alice (group covers 1,2,3,4)
-    c.execute("UPDATE faces SET person_id=-1 WHERE id=4")   # face 4 drifts to noise
-    overrides.merge_persons(c, 0, 2)                        # Alice -> Carol; face 4 would orphan
+    overrides.merge_persons(c, 1, 0)  # Bob -> Alice (group covers 1,2,3,4)
+    c.execute("UPDATE faces SET person_id=-1 WHERE id=4")  # face 4 drifts to noise
+    overrides.merge_persons(c, 0, 2)  # Alice -> Carol; face 4 would orphan
     # simulate a re-cluster scattering everyone, then re-apply intent
     c.execute("UPDATE faces SET person_id=10 WHERE id IN (1,2,3)")
     c.execute("UPDATE faces SET person_id=11 WHERE id IN (5,6)")

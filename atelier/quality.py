@@ -1,4 +1,5 @@
 """Pure-math quality signals. numpy-only — no models, no cv2. Fully unit-testable."""
+
 import numpy as np
 
 from . import config
@@ -10,8 +11,7 @@ def laplacian_var(gray):
     g = np.asarray(gray, dtype=np.float64)
     if g.ndim != 2 or g.shape[0] < 3 or g.shape[1] < 3:
         return 0.0
-    lap = (g[:-2, 1:-1] + g[2:, 1:-1] + g[1:-1, :-2] + g[1:-1, 2:]
-           - 4.0 * g[1:-1, 1:-1])
+    lap = g[:-2, 1:-1] + g[2:, 1:-1] + g[1:-1, :-2] + g[1:-1, 2:] - 4.0 * g[1:-1, 1:-1]
     return float(lap.var())
 
 
@@ -40,9 +40,7 @@ def aesthetic_proxy(rgb, sharp, exposure):
     """Heuristic aesthetic score [0,1] from colorfulness + exposure + sharpness.
     A defensible proxy, NOT a learned aesthetic model — swap in a trained head later."""
     c = colorfulness(rgb) if rgb is not None else 0.4
-    score = (config.AESTHETIC_W_COLOR * c
-             + config.AESTHETIC_W_EXPOSURE * exposure
-             + config.AESTHETIC_W_SHARP * sharp)
+    score = config.AESTHETIC_W_COLOR * c + config.AESTHETIC_W_EXPOSURE * exposure + config.AESTHETIC_W_SHARP * sharp
     return float(np.clip(score, 0.0, 1.0))
 
 
@@ -105,15 +103,13 @@ def kps_plausible(kps, box):
     le, re, nose, ml, mr = k[0], k[1], k[2], k[3], k[4]
     x1, y1, x2, y2 = box
     w, h = max(x2 - x1, 1.0), max(y2 - y1, 1.0)
-    for p in k:                                  # all keypoints near/inside the box
+    for p in k:  # all keypoints near/inside the box
         if not (x1 - 0.2 * w <= p[0] <= x2 + 0.2 * w and y1 - 0.2 * h <= p[1] <= y2 + 0.2 * h):
             return False
-    if le[0] >= re[0]:                           # left eye left of right eye
+    if le[0] >= re[0]:  # left eye left of right eye
         return False
     eye_y, mouth_y, tol = (le[1] + re[1]) / 2.0, (ml[1] + mr[1]) / 2.0, 0.1 * h
-    if not (eye_y < nose[1] + tol and nose[1] < mouth_y + tol and eye_y < mouth_y):
-        return False
-    return True
+    return eye_y < nose[1] + tol and nose[1] < mouth_y + tol and eye_y < mouth_y
 
 
 # ---------------------------------------------------------------- composites
@@ -154,7 +150,7 @@ def print_score(global_sharp, exposure, eyes_list, expr_list):
         + config.PRINT_W_EXPR * expr
     )
     if global_sharp < config.PRINT_DISQUALIFY_SHARP:
-        score *= config.PRINT_BLUR_PENALTY   # motion blur => not printable
+        score *= config.PRINT_BLUR_PENALTY  # motion blur => not printable
     return float(score)
 
 
@@ -164,7 +160,7 @@ def candid_score(global_sharp, exposure, smile_list, frontality_list):
     if not smile_list:
         return 0.0
     sm = sum(smile_list) / len(smile_list)
-    off = 1.0 - (sum(frontality_list) / len(frontality_list))   # off-axis = candid
+    off = 1.0 - (sum(frontality_list) / len(frontality_list))  # off-axis = candid
     score = 0.35 * global_sharp + 0.15 * exposure + 0.30 * sm + 0.20 * off
     if global_sharp < config.PRINT_DISQUALIFY_SHARP:
         score *= config.PRINT_BLUR_PENALTY

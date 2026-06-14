@@ -3,6 +3,7 @@
 Base schema = v0. Schema growth happens via MIGRATIONS (PRAGMA user_version),
 applied automatically on connect() so existing project DBs upgrade in place.
 """
+
 import sqlite3
 
 BASE_SCHEMA = """
@@ -69,26 +70,34 @@ CREATE INDEX IF NOT EXISTS idx_images_processed ON images(processed);
 MIGRATIONS = [
     # v1 — Phase 0: manual identity overrides, anchored on the only re-run-stable
     # key (faces.id). group_key identifies a forced identity; kind = merge|reassign|split.
-    (1, [
-        """CREATE TABLE IF NOT EXISTS person_overrides (
+    (
+        1,
+        [
+            """CREATE TABLE IF NOT EXISTS person_overrides (
              face_id INTEGER PRIMARY KEY REFERENCES faces(id),
              group_key TEXT NOT NULL,
              kind TEXT,
              display_name TEXT,
              created_at REAL
            )""",
-        "CREATE INDEX IF NOT EXISTS idx_overrides_group ON person_overrides(group_key)",
-    ]),
+            "CREATE INDEX IF NOT EXISTS idx_overrides_group ON person_overrides(group_key)",
+        ],
+    ),
     # v2 — Phase 1: persisted image thumbnails + composite indices matching server sorts.
-    (2, [
-        "ALTER TABLE images ADD COLUMN thumbnail BLOB",
-        "CREATE INDEX IF NOT EXISTS idx_faces_person_best ON faces(person_id, is_best DESC, quality_score DESC)",
-        "CREATE INDEX IF NOT EXISTS idx_series_frame_count ON series(frame_count DESC)",
-        "CREATE INDEX IF NOT EXISTS idx_images_series_score ON images(series_id, print_score DESC)",
-    ]),
+    (
+        2,
+        [
+            "ALTER TABLE images ADD COLUMN thumbnail BLOB",
+            "CREATE INDEX IF NOT EXISTS idx_faces_person_best ON faces(person_id, is_best DESC, quality_score DESC)",
+            "CREATE INDEX IF NOT EXISTS idx_series_frame_count ON series(frame_count DESC)",
+            "CREATE INDEX IF NOT EXISTS idx_images_series_score ON images(series_id, print_score DESC)",
+        ],
+    ),
     # v3 — Phase 2: multiple criteria-based picks per series; face_count for aggregation.
-    (3, [
-        """CREATE TABLE IF NOT EXISTS picks (
+    (
+        3,
+        [
+            """CREATE TABLE IF NOT EXISTS picks (
              id INTEGER PRIMARY KEY,
              series_id INTEGER REFERENCES series(id),
              image_id INTEGER REFERENCES images(id),
@@ -98,22 +107,28 @@ MIGRATIONS = [
              source TEXT DEFAULT 'auto',
              UNIQUE(series_id, pick_type)
            )""",
-        "CREATE INDEX IF NOT EXISTS idx_picks_series ON picks(series_id)",
-        "ALTER TABLE images ADD COLUMN face_count INTEGER DEFAULT 0",
-    ]),
+            "CREATE INDEX IF NOT EXISTS idx_picks_series ON picks(series_id)",
+            "ALTER TABLE images ADD COLUMN face_count INTEGER DEFAULT 0",
+        ],
+    ),
     # v4 — Phase 4: aesthetic score + raw sharpness for event-adaptive normalization.
-    (4, [
-        "ALTER TABLE images ADD COLUMN aesthetic_score REAL",
-        "ALTER TABLE images ADD COLUMN global_sharpness_raw REAL",
-        "ALTER TABLE faces ADD COLUMN face_sharpness_raw REAL",
-    ]),
+    (
+        4,
+        [
+            "ALTER TABLE images ADD COLUMN aesthetic_score REAL",
+            "ALTER TABLE images ADD COLUMN global_sharpness_raw REAL",
+            "ALTER TABLE faces ADD COLUMN face_sharpness_raw REAL",
+        ],
+    ),
     # v5 — re-anchor picks on the STABLE key (image_id). series_id is rebuilt by
     # 02b every run, so picks keyed on it broke on regroup (and FK-blocked the
     # series rebuild). Now only manual picks are stored; auto picks are derived at
     # read time from per-image scores. candid_score is stored alongside.
-    (5, [
-        "DROP TABLE IF EXISTS picks",
-        """CREATE TABLE picks (
+    (
+        5,
+        [
+            "DROP TABLE IF EXISTS picks",
+            """CREATE TABLE picks (
              id INTEGER PRIMARY KEY,
              image_id INTEGER NOT NULL REFERENCES images(id),
              pick_type TEXT NOT NULL,
@@ -121,13 +136,16 @@ MIGRATIONS = [
              reason TEXT,
              UNIQUE(image_id, pick_type)
            )""",
-        "CREATE INDEX IF NOT EXISTS idx_picks_image ON picks(image_id)",
-        "ALTER TABLE images ADD COLUMN candid_score REAL",
-    ]),
+            "CREATE INDEX IF NOT EXISTS idx_picks_image ON picks(image_id)",
+            "ALTER TABLE images ADD COLUMN candid_score REAL",
+        ],
+    ),
     # v6 — persistent run history: each pipeline run is recorded so history and
     # per-run logs survive a server restart (status reconciled to 'interrupted').
-    (6, [
-        """CREATE TABLE IF NOT EXISTS runs (
+    (
+        6,
+        [
+            """CREATE TABLE IF NOT EXISTS runs (
              id INTEGER PRIMARY KEY,
              started_at REAL,
              finished_at REAL,
@@ -136,7 +154,8 @@ MIGRATIONS = [
              error TEXT,
              log_file TEXT
            )""",
-    ]),
+        ],
+    ),
 ]
 
 SCHEMA_VERSION = MIGRATIONS[-1][0] if MIGRATIONS else 0
@@ -148,7 +167,7 @@ def _apply_migrations(conn):
         return
     conn.execute("BEGIN IMMEDIATE")
     try:
-        cur = conn.execute("PRAGMA user_version").fetchone()[0]   # re-read under lock
+        cur = conn.execute("PRAGMA user_version").fetchone()[0]  # re-read under lock
         for version, statements in MIGRATIONS:
             if version <= cur:
                 continue
@@ -172,7 +191,7 @@ def _raw_connect(path):
 def connect(path):
     conn = _raw_connect(path)
     if conn.execute("PRAGMA user_version").fetchone()[0] < SCHEMA_VERSION:
-        conn.executescript(BASE_SCHEMA)   # self-heal: ensure base tables before ALTERs
+        conn.executescript(BASE_SCHEMA)  # self-heal: ensure base tables before ALTERs
         conn.commit()
     _apply_migrations(conn)
     return conn

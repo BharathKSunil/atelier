@@ -5,6 +5,8 @@ Exposes lock-guarded live status, tees output to a durable per-run log file
 (timestamped, never truncated), supports cancellation and a stall watchdog, and
 records every run in the `runs` table so history survives a server restart.
 """
+
+import contextlib
 import os
 import shutil
 import subprocess
@@ -21,25 +23,25 @@ _log_mod = get_logger("atelier.runner")
 # phases run as `python -m atelier.pipeline.<name>` subprocesses (isolation: a phase
 # crash never kills the server; models reload per run).
 PHASES = [
-    ("index",   "atelier.pipeline.index", lambda folder, dbp: ["--photos", folder, "--db", dbp]),
+    ("index", "atelier.pipeline.index", lambda folder, dbp: ["--photos", folder, "--db", dbp]),
     ("cluster", "atelier.pipeline.cluster", lambda folder, dbp: ["--db", dbp]),
-    ("series",  "atelier.pipeline.series", lambda folder, dbp: ["--db", dbp]),
-    ("score",   "atelier.pipeline.score", lambda folder, dbp: ["--db", dbp]),
+    ("series", "atelier.pipeline.series", lambda folder, dbp: ["--db", dbp]),
+    ("score", "atelier.pipeline.score", lambda folder, dbp: ["--db", dbp]),
 ]
 PHASE_NAMES = [p[0] for p in PHASES]
 PROJECT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-MAX_LOG_LINES = 5000   # in-memory ring buffer for the live UI (full log is on disk)
-ERROR_TAIL = 40        # lines of a crashed phase's output kept as error_detail
+MAX_LOG_LINES = 5000  # in-memory ring buffer for the live UI (full log is on disk)
+ERROR_TAIL = 40  # lines of a crashed phase's output kept as error_detail
 
 
 class Runner:
     def __init__(self, db_path, log_path=None, runs_dir=None):
         self.db_path = db_path
-        self.log_path = log_path        # back-compat "latest" log mirror
-        self.runs_dir = runs_dir        # ~/.atelier/<slug>/runs
+        self.log_path = log_path  # back-compat "latest" log mirror
+        self.runs_dir = runs_dir  # ~/.atelier/<slug>/runs
         self.lock = threading.Lock()
         self._event = threading.Event()
-        self.log = deque(maxlen=MAX_LOG_LINES)   # entries: {"n", "ts", "t"}
+        self.log = deque(maxlen=MAX_LOG_LINES)  # entries: {"n", "ts", "t"}
         self._seq = 0
         self._fh = None
         self._log_file = None
@@ -52,9 +54,16 @@ class Runner:
         self._flags = {}
         self.run_id = None
         self.state = {
-            "running": False, "phase": None, "phases_done": [], "error": None,
-            "error_detail": None, "folder": None, "started_at": None,
-            "finished_at": None, "run_id": None, "phase_timings": {},
+            "running": False,
+            "phase": None,
+            "phases_done": [],
+            "error": None,
+            "error_detail": None,
+            "folder": None,
+            "started_at": None,
+            "finished_at": None,
+            "run_id": None,
+            "phase_timings": {},
         }
 
     # ---------- public API ----------
@@ -64,17 +73,17 @@ class Runner:
             s["all_phases"] = PHASE_NAMES
             s["seq"] = self._seq
             s["log"] = [ln["t"] for ln in list(self.log)[-200:]]
-        try:    # DB counts on a throwaway read connection (outside the lock)
+        try:  # DB counts on a throwaway read connection (outside the lock)
             c = db.connect(self.db_path)
 
             def one(q):
                 return c.execute(q).fetchone()[0]
+
             s["faces_found"] = one("SELECT COUNT(*) FROM faces")
             s["index_total"] = one("SELECT COUNT(*) FROM images")
             s["index_done"] = one("SELECT COUNT(*) FROM images WHERE processed!=0")
             s["errors"] = one("SELECT COUNT(*) FROM images WHERE processed=2")
-            s["recent_face_ids"] = [r[0] for r in
-                                    c.execute("SELECT id FROM faces ORDER BY id DESC LIMIT 24")]
+            s["recent_face_ids"] = [r[0] for r in c.execute("SELECT id FROM faces ORDER BY id DESC LIMIT 24")]
             c.close()
         except Exception:
             pass
@@ -106,7 +115,9 @@ class Runner:
             c = db.connect(self.db_path)
             rows = c.execute(
                 """SELECT id, started_at, finished_at, status, phases, error
-                   FROM runs ORDER BY id DESC LIMIT ?""", (limit,)).fetchall()
+                   FROM runs ORDER BY id DESC LIMIT ?""",
+                (limit,),
+            ).fetchall()
             c.close()
             return [dict(r) for r in rows]
         except Exception:
@@ -128,8 +139,10 @@ class Runner:
         self._reconciled = True
         try:
             c = db.connect(self.db_path)
-            c.execute("UPDATE runs SET status='interrupted', finished_at=COALESCE(finished_at, ?) "
-                      "WHERE status='running'", (time.time(),))
+            c.execute(
+                "UPDATE runs SET status='interrupted', finished_at=COALESCE(finished_at, ?) WHERE status='running'",
+                (time.time(),),
+            )
             c.commit()
             c.close()
         except Exception:
@@ -150,9 +163,18 @@ class Runner:
             self._seq = 0
             self.run_id = int(time.time() * 1000)
             self._open_log(self.run_id)
-            self.state.update(running=True, phase=None, phases_done=[], error=None,
-                              error_detail=None, folder=folder, started_at=time.time(),
-                              finished_at=None, run_id=self.run_id, phase_timings={})
+            self.state.update(
+                running=True,
+                phase=None,
+                phases_done=[],
+                error=None,
+                error_detail=None,
+                folder=folder,
+                started_at=time.time(),
+                finished_at=None,
+                run_id=self.run_id,
+                phase_timings={},
+            )
         self.reconcile()
         self._record_run_start(self.run_id, folder, [p[0] for p in self._phases], self._log_file)
         threading.Thread(target=self._run, args=(folder,), daemon=True).start()
@@ -166,10 +188,8 @@ class Runner:
             proc = self._proc
         self._log("!! stop requested")
         if proc:
-            try:
+            with contextlib.suppress(Exception):
                 proc.terminate()
-            except Exception:
-                pass
         return True, "stopping"
 
     # ---------- internals ----------
@@ -187,7 +207,8 @@ class Runner:
             target = self.log_path
         if target:
             try:
-                self._fh = open(target, "a", buffering=1, encoding="utf-8")
+                # held open for the whole run; closed in _close_log (not a with-block)
+                self._fh = open(target, "a", buffering=1, encoding="utf-8")  # noqa: SIM115
                 self._log_file = target
             except OSError:
                 self._fh = None
@@ -203,11 +224,10 @@ class Runner:
                 _log_mod.info("phase %s started", name)
                 t0 = time.monotonic()
                 self._last_output = time.monotonic()
-                cmd = [sys.executable, "-m", module, *build_args(folder, self.db_path),
-                       *self._flags.get(name, [])]
+                cmd = [sys.executable, "-m", module, *build_args(folder, self.db_path), *self._flags.get(name, [])]
                 proc = subprocess.Popen(
-                    cmd, cwd=PROJECT_DIR, text=True, bufsize=1,
-                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+                    cmd, cwd=PROJECT_DIR, text=True, bufsize=1, stdout=subprocess.PIPE, stderr=subprocess.STDOUT
+                )
                 with self.lock:
                     self._proc = proc
                 tail = deque(maxlen=ERROR_TAIL)
@@ -263,10 +283,8 @@ class Runner:
                     self._cancelled = True
                     self._stalled = True
                 self._log(f"!! no output for {timeout}s — terminating stalled phase")
-                try:
+                with contextlib.suppress(Exception):
                     proc.terminate()
-                except Exception:
-                    pass
                 return
             time.sleep(5)
 
@@ -285,10 +303,8 @@ class Runner:
             self._seq += 1
             self.log.append({"n": self._seq, "ts": ts, "t": msg})
             if self._fh:
-                try:
+                with contextlib.suppress(OSError, ValueError):
                     self._fh.write(time.strftime("%H:%M:%S ", time.localtime(ts)) + msg + "\n")
-                except (OSError, ValueError):
-                    pass
         self._event.set()
 
     def _close_log(self):
@@ -296,16 +312,12 @@ class Runner:
             fh, src = self._fh, self._log_file
             self._fh = None
         if fh:
-            try:
+            with contextlib.suppress(OSError):
                 fh.close()
-            except OSError:
-                pass
         # mirror the latest run to <slug>/run.log for back-compat / quick tailing
         if src and self.log_path and os.path.abspath(src) != os.path.abspath(self.log_path):
-            try:
+            with contextlib.suppress(OSError):
                 shutil.copy2(src, self.log_path)
-            except OSError:
-                pass
 
     def _record_run_start(self, run_id, folder, phases, log_file):
         try:
@@ -313,7 +325,8 @@ class Runner:
             c.execute(
                 """INSERT OR REPLACE INTO runs(id, started_at, finished_at, status, phases, error, log_file)
                    VALUES(?,?,?,?,?,?,?)""",
-                (run_id, time.time(), None, "running", ",".join(phases), None, log_file or ""))
+                (run_id, time.time(), None, "running", ",".join(phases), None, log_file or ""),
+            )
             c.commit()
             c.close()
         except Exception:
@@ -324,8 +337,9 @@ class Runner:
             return
         try:
             c = db.connect(self.db_path)
-            c.execute("UPDATE runs SET finished_at=?, status=?, error=? WHERE id=?",
-                      (time.time(), status, error, run_id))
+            c.execute(
+                "UPDATE runs SET finished_at=?, status=?, error=? WHERE id=?", (time.time(), status, error, run_id)
+            )
             c.commit()
             c.close()
         except Exception:

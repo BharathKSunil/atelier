@@ -30,8 +30,7 @@ def test_migrate_flat_to_nested(tmp_path):
     src = tmp_path / "projects"
     src.mkdir()
     db.init_db(str(src / "wed.db")).close()
-    (src / "registry.json").write_text(
-        '[{"slug":"wed","name":"Wed","source_folder":"/x","created_at":1.0}]')
+    (src / "registry.json").write_text('[{"slug":"wed","name":"Wed","source_folder":"/x","created_at":1.0}]')
     (src / "wed.log").write_text("old log\n")
 
     dst = str(tmp_path / "atelier")

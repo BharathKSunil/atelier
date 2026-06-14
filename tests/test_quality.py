@@ -29,15 +29,15 @@ def test_exposure_penalizes_clipping():
 
 def test_eye_open_vs_closed():
     open_pts = np.array([[0, 0], [1, 2], [2, 2], [3, 0], [2, -2], [1, -2]], float)
-    closed_pts = np.array([[0, 0], [1, .2], [2, .2], [3, 0], [2, -.2], [1, -.2]], float)
+    closed_pts = np.array([[0, 0], [1, 0.2], [2, 0.2], [3, 0], [2, -0.2], [1, -0.2]], float)
     eo = quality.eye_openness(quality.ear(open_pts), quality.ear(open_pts))
     ec = quality.eye_openness(quality.ear(closed_pts), quality.ear(closed_pts))
     assert eo > ec
 
 
 def test_frontality_centered_is_high():
-    front = quality.frontality([0, 0], [10, 0], [5, 3])     # nose centered
-    profile = quality.frontality([0, 0], [10, 0], [9, 3])   # nose near one eye
+    front = quality.frontality([0, 0], [10, 0], [5, 3])  # nose centered
+    profile = quality.frontality([0, 0], [10, 0], [9, 3])  # nose near one eye
     assert front > profile
     assert front > 0.9
 
@@ -68,7 +68,7 @@ def test_face_quality_monotonic_in_sharpness():
 def test_squash_sharpness_monotone_unsaturated():
     a = quality.squash_sharpness(150)
     b = quality.squash_sharpness(600)
-    assert 0 < a < b < 1.0           # keeps discriminating past the old cap
+    assert 0 < a < b < 1.0  # keeps discriminating past the old cap
 
 
 def test_eyes_aggregate_single_vs_group():
@@ -92,10 +92,10 @@ def test_aesthetic_proxy_in_range():
     rgb = np.random.default_rng(0).integers(0, 255, (16, 16, 3), dtype=np.uint8)
     s = quality.aesthetic_proxy(rgb, 0.7, 0.8)
     assert 0.0 <= s <= 1.0
-    assert quality.aesthetic_proxy(None, 0.5, 0.5) >= 0.0   # missing image tolerated
+    assert quality.aesthetic_proxy(None, 0.5, 0.5) >= 0.0  # missing image tolerated
 
 
 def test_candid_prefers_offaxis_smile():
-    posed = quality.candid_score(0.7, 0.8, [0.1], [0.95])     # smiling little, very frontal
-    candid = quality.candid_score(0.7, 0.8, [0.8], [0.3])     # smiling, off-axis
+    posed = quality.candid_score(0.7, 0.8, [0.1], [0.95])  # smiling little, very frontal
+    candid = quality.candid_score(0.7, 0.8, [0.8], [0.3])  # smiling, off-axis
     assert candid > posed

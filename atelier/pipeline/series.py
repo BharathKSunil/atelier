@@ -4,6 +4,7 @@
 Signal = EXIF time blocking + DINOv2 global-embedding cosine. Images without
 reliable EXIF time (PNG -> mtime fallback) merge only on a tighter embed cosine.
 """
+
 import argparse
 from collections import defaultdict
 
@@ -21,9 +22,12 @@ def main():
     args = ap.parse_args()
 
     conn = db.connect(args.db)
-    rows = list(conn.execute(
-        """SELECT id, taken_at, exif_time, global_embedding FROM images
-           WHERE processed=1 AND global_embedding IS NOT NULL"""))
+    rows = list(
+        conn.execute(
+            """SELECT id, taken_at, exif_time, global_embedding FROM images
+           WHERE processed=1 AND global_embedding IS NOT NULL"""
+        )
+    )
     if not rows:
         print("no indexed images — run 01_index.py first")
         return
@@ -32,17 +36,18 @@ def main():
     for r in rows:
         emb = np.frombuffer(r["global_embedding"], dtype=np.float32)
         emb = emb / (np.linalg.norm(emb) + 1e-9)
-        items.append({
-            "id": r["id"],
-            "t": r["taken_at"] if r["exif_time"] else None,
-            "emb": emb,
-        })
+        items.append(
+            {
+                "id": r["id"],
+                "t": r["taken_at"] if r["exif_time"] else None,
+                "emb": emb,
+            }
+        )
 
     mapping = series.group_series(items, args.time_gap, args.cos, args.embed_cos)
 
     conn.execute("DELETE FROM series")
-    conn.executemany("UPDATE images SET series_id=? WHERE id=?",
-                     [(sid, iid) for iid, sid in mapping.items()])
+    conn.executemany("UPDATE images SET series_id=? WHERE id=?", [(sid, iid) for iid, sid in mapping.items()])
 
     members = defaultdict(list)
     for iid, sid in mapping.items():
@@ -52,7 +57,8 @@ def main():
         ts = [tmap[i] for i in ids if tmap[i] is not None]
         conn.execute(
             "INSERT OR REPLACE INTO series(id, frame_count, time_start, time_end) VALUES(?,?,?,?)",
-            (sid, len(ids), min(ts) if ts else None, max(ts) if ts else None))
+            (sid, len(ids), min(ts) if ts else None, max(ts) if ts else None),
+        )
     conn.commit()
 
     multi = sum(1 for ids in members.values() if len(ids) > 1)

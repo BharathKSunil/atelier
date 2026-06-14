@@ -5,6 +5,7 @@ Layout under <projects_dir>/:
   <slug>.db            per-project database (atelier.db schema)
   <slug>.log           per-project run log
 """
+
 import json
 import os
 import re
@@ -91,7 +92,7 @@ def create_project(projects_dir, name, folder, now=None):
     items.append(proj)
     _save(projects_dir, items)
     os.makedirs(project_dir(projects_dir, slug), exist_ok=True)
-    db.init_db(db_path(projects_dir, slug)).close()   # materialize empty DB
+    db.init_db(db_path(projects_dir, slug)).close()  # materialize empty DB
     return proj
 
 
@@ -137,6 +138,7 @@ def stats(projects_dir, slug):
 
     def one(q):
         return c.execute(q).fetchone()[0]
+
     try:
         return {
             "images": one("SELECT COUNT(*) FROM images WHERE processed=1"),

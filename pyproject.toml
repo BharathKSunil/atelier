@@ -70,5 +70,5 @@ target-version = "py311"
 extend-exclude = [".venv", "atelier/web"]
 
 [tool.ruff.lint]
-select = ["E", "W", "F", "I"]
+select = ["E", "W", "F", "I", "B", "UP", "SIM"]
 ignore = ["E741"]   # ambiguous var name 'l' used in tight loops

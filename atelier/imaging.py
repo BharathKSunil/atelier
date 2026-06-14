@@ -1,4 +1,5 @@
 """Image loading, downscaling, and EXIF/metadata extraction. Pillow-only."""
+
 import os
 from datetime import datetime
 from pathlib import Path
@@ -8,10 +9,10 @@ from PIL import ExifTags, Image, ImageOps
 
 IMG_EXTS = {".jpg", ".jpeg", ".png"}
 
-_EXIF_DATETIME_ORIG = 36867   # DateTimeOriginal (Exif IFD)
-_EXIF_SUBSEC_ORIG = 37521     # SubSecTimeOriginal
-_EXIF_MODEL = 272             # Model (IFD0)
-_EXIF_ORIENT = 274            # Orientation (IFD0)
+_EXIF_DATETIME_ORIG = 36867  # DateTimeOriginal (Exif IFD)
+_EXIF_SUBSEC_ORIG = 37521  # SubSecTimeOriginal
+_EXIF_MODEL = 272  # Model (IFD0)
+_EXIF_ORIENT = 274  # Orientation (IFD0)
 
 
 def iter_images(root):
@@ -51,7 +52,7 @@ def read_metadata(path, img):
     """
     taken_at, exif_time, sub_sec, camera, orientation = None, False, None, None, None
     try:
-        exif = Image.open(path).getexif()   # read from original (img may be exif-transposed)
+        exif = Image.open(path).getexif()  # read from original (img may be exif-transposed)
         if exif:
             orientation = exif.get(_EXIF_ORIENT)
             model = exif.get(_EXIF_MODEL)
@@ -77,5 +78,5 @@ def read_metadata(path, img):
         pass
 
     if taken_at is None:
-        taken_at = os.path.getmtime(path)   # fallback; exif_time stays False
+        taken_at = os.path.getmtime(path)  # fallback; exif_time stays False
     return taken_at, exif_time, sub_sec, camera, orientation

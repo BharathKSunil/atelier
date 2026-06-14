@@ -6,6 +6,7 @@ creates projects, a native macOS dialog picks the source folder, the pipeline
 runs in the background with a live console, and People/Series/Faces are browsed
 per project.
 """
+
 import argparse
 import io
 import json
@@ -67,8 +68,7 @@ def create_app(projects_dir):
     # ----- helpers -----
     def _allowed_roots():
         roots = []
-        for r in (os.path.expanduser("~"), projects_dir,
-                  "/Volumes", "/tmp", "/private/tmp", "/mnt", "/media"):
+        for r in (os.path.expanduser("~"), projects_dir, "/Volumes", "/tmp", "/private/tmp", "/mnt", "/media"):
             try:
                 rp = os.path.realpath(r)
             except OSError:
@@ -98,9 +98,12 @@ def create_app(projects_dir):
         return db.connect(projects.db_path(projects_dir, slug))
 
     def _runner(slug):
-        return get_runner(slug, projects.db_path(projects_dir, slug),
-                          projects.log_path(projects_dir, slug),
-                          projects.runs_dir(projects_dir, slug))
+        return get_runner(
+            slug,
+            projects.db_path(projects_dir, slug),
+            projects.log_path(projects_dir, slug),
+            projects.runs_dir(projects_dir, slug),
+        )
 
     def _page():
         try:
@@ -141,8 +144,7 @@ def create_app(projects_dir):
         path = fsdialog.choose_folder(default)
         if not path:
             unavailable = not fsdialog.available()
-            msg = ("native folder picker is macOS-only — type or paste the folder path"
-                   if unavailable else "cancelled")
+            msg = "native folder picker is macOS-only — type or paste the folder path" if unavailable else "cancelled"
             return jsonify(ok=False, msg=msg, unavailable=unavailable), 200
         return jsonify(ok=True, path=path, exists=os.path.isdir(path))
 
@@ -162,12 +164,15 @@ def create_app(projects_dir):
             item["cover"] = []
             try:
                 c = _conn(p["slug"])
-                item["cover"] = [r[0] for r in c.execute(
-                    """SELECT id FROM images WHERE processed=1 AND thumbnail IS NOT NULL
-                       ORDER BY print_score DESC LIMIT 5""")]
+                item["cover"] = [
+                    r[0]
+                    for r in c.execute(
+                        """SELECT id FROM images WHERE processed=1 AND thumbnail IS NOT NULL
+                       ORDER BY print_score DESC LIMIT 5"""
+                    )
+                ]
                 if not item["cover"]:
-                    item["cover"] = [r[0] for r in c.execute(
-                        "SELECT id FROM images WHERE processed=1 LIMIT 5")]
+                    item["cover"] = [r[0] for r in c.execute("SELECT id FROM images WHERE processed=1 LIMIT 5")]
                 c.close()
             except Exception:
                 pass
@@ -200,7 +205,7 @@ def create_app(projects_dir):
         body = request.json or {}
         folder = body.get("folder") or proj["source_folder"]
         flags = settings.phase_flags(settings.load(projects_dir, slug))
-        phases = settings.PHASES_FOR.get(body.get("affects"))   # None -> full pipeline
+        phases = settings.PHASES_FOR.get(body.get("affects"))  # None -> full pipeline
         ok, msg = _runner(slug).start(folder, phases=phases, flags=flags)
         return jsonify(ok=ok, msg=msg), (200 if ok else 409)
 
@@ -247,8 +252,12 @@ def create_app(projects_dir):
             for n, t in r.stream(since=since):
                 yield f"id: {n}\ndata: {json.dumps(t)}\n\n"
             yield "event: end\ndata: {}\n\n"
-        return Response(stream_with_context(gen()), mimetype="text/event-stream",
-                        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+        return Response(
+            stream_with_context(gen()),
+            mimetype="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
 
     @app.get("/api/p/<slug>/runs")
     def runs_list(slug):
@@ -282,8 +291,7 @@ def create_app(projects_dir):
         if q:
             where = "WHERE p.display_name LIKE '%'||?||'%' COLLATE NOCASE"
             params.append(q)
-        total = c.execute(
-            f"SELECT COUNT(*) FROM persons p {where}", params).fetchone()[0]
+        total = c.execute(f"SELECT COUNT(*) FROM persons p {where}", params).fetchone()[0]
         rows = c.execute(
             f"""SELECT p.id, p.display_name, COUNT(f.id) cnt,
                  (SELECT id FROM faces WHERE person_id=p.id
@@ -291,7 +299,8 @@ def create_app(projects_dir):
                FROM persons p LEFT JOIN faces f ON f.person_id=p.id
                {where}
                GROUP BY p.id ORDER BY cnt DESC LIMIT ? OFFSET ?""",
-            (*params, limit, offset)).fetchall()
+            (*params, limit, offset),
+        ).fetchall()
         return _paged([dict(r) for r in rows], total, offset, limit)
 
     @app.get("/api/p/<slug>/persons/<int:pid>/faces")
@@ -304,7 +313,9 @@ def create_app(projects_dir):
             """SELECT f.id, f.image_id, f.quality_score, f.is_best, i.path
                FROM faces f JOIN images i ON i.id=f.image_id
                WHERE f.person_id=? ORDER BY f.is_best DESC, f.quality_score DESC
-               LIMIT ? OFFSET ?""", (pid, limit, offset)).fetchall()
+               LIMIT ? OFFSET ?""",
+            (pid, limit, offset),
+        ).fetchall()
         return _paged([dict(r) for r in rows], total, offset, limit)
 
     @app.post("/api/p/<slug>/persons/<int:pid>/rename")
@@ -368,9 +379,14 @@ def create_app(projects_dir):
         if not dest:
             return jsonify(ok=False, msg="choose a valid destination folder"), 400
         c = _conn(slug)
-        paths = [r["path"] for r in c.execute(
-            """SELECT DISTINCT i.path FROM images i JOIN faces f ON f.image_id=i.id
-               WHERE f.person_id=?""", (pid,))]
+        paths = [
+            r["path"]
+            for r in c.execute(
+                """SELECT DISTINCT i.path FROM images i JOIN faces f ON f.image_id=i.id
+               WHERE f.person_id=?""",
+                (pid,),
+            )
+        ]
         os.makedirs(dest, exist_ok=True)
         n = 0
         for p in paths:
@@ -393,7 +409,9 @@ def create_app(projects_dir):
             """SELECT s.id, s.frame_count, s.best_image_id,
                  (SELECT print_score FROM images WHERE id=s.best_image_id) best_score
                FROM series s WHERE s.frame_count>1
-               ORDER BY s.frame_count DESC LIMIT ? OFFSET ?""", (limit, offset)).fetchall()
+               ORDER BY s.frame_count DESC LIMIT ? OFFSET ?""",
+            (limit, offset),
+        ).fetchall()
         return _paged([dict(r) for r in rows], total, offset, limit)
 
     @app.get("/api/p/<slug>/series/<int:sid>/images")
@@ -403,7 +421,9 @@ def create_app(projects_dir):
         rows = c.execute(
             """SELECT id, path, print_score, is_best_in_series, global_sharpness, exposure_score,
                  EXISTS(SELECT 1 FROM picks WHERE image_id=images.id AND pick_type='print') AS is_print
-               FROM images WHERE series_id=? ORDER BY print_score DESC""", (sid,)).fetchall()
+               FROM images WHERE series_id=? ORDER BY print_score DESC""",
+            (sid,),
+        ).fetchall()
         return jsonify([dict(r) for r in rows])
 
     # picks are image-anchored (survive series regroup); auto picks derived here.
@@ -413,16 +433,25 @@ def create_app(projects_dir):
     def series_picks(slug, sid):
         _require(slug)
         c = _conn(slug)
-        imgs = list(c.execute(
-            """SELECT id, print_score, aesthetic_score, candid_score
-               FROM images WHERE series_id=?""", (sid,)))
+        imgs = list(
+            c.execute(
+                """SELECT id, print_score, aesthetic_score, candid_score
+               FROM images WHERE series_id=?""",
+                (sid,),
+            )
+        )
         if not imgs:
             return jsonify(pick_types=config.PICK_TYPES, picks=[])
         ids = [r["id"] for r in imgs]
         ph = ",".join("?" * len(ids))
-        manual = {r["pick_type"]: r["image_id"] for r in c.execute(
-            f"""SELECT pick_type, image_id FROM picks
-                WHERE source='manual' AND image_id IN ({ph})""", ids)}
+        manual = {
+            r["pick_type"]: r["image_id"]
+            for r in c.execute(
+                f"""SELECT pick_type, image_id FROM picks
+                WHERE source='manual' AND image_id IN ({ph})""",
+                ids,
+            )
+        }
         out = []
         for ptype in config.PICK_TYPES:
             if ptype in manual:
@@ -446,13 +475,14 @@ def create_app(projects_dir):
         if iid not in ids:
             return jsonify(ok=False, msg="image not in series"), 400
         already = c.execute(
-            "SELECT 1 FROM picks WHERE image_id=? AND pick_type=? AND source='manual'",
-            (iid, ptype)).fetchone()
+            "SELECT 1 FROM picks WHERE image_id=? AND pick_type=? AND source='manual'", (iid, ptype)
+        ).fetchone()
         ph = ",".join("?" * len(ids))
         c.execute(f"DELETE FROM picks WHERE pick_type=? AND image_id IN ({ph})", [ptype, *ids])
-        if not already:   # was already manual here -> the delete toggled it off
-            c.execute("INSERT INTO picks(image_id, pick_type, source, reason) VALUES(?,?,'manual','user')",
-                      (iid, ptype))
+        if not already:  # was already manual here -> the delete toggled it off
+            c.execute(
+                "INSERT INTO picks(image_id, pick_type, source, reason) VALUES(?,?,'manual','user')", (iid, ptype)
+            )
         c.commit()
         return jsonify(ok=True)
 
@@ -461,14 +491,16 @@ def create_app(projects_dir):
     def star(slug, iid):
         _require(slug)
         c = _conn(slug)
-        existing = c.execute(
-            "SELECT 1 FROM picks WHERE image_id=? AND pick_type='print'", (iid,)).fetchone()
+        existing = c.execute("SELECT 1 FROM picks WHERE image_id=? AND pick_type='print'", (iid,)).fetchone()
         if existing:
             c.execute("DELETE FROM picks WHERE image_id=? AND pick_type='print'", (iid,))
             starred = False
         else:
-            c.execute("INSERT OR IGNORE INTO picks(image_id, pick_type, source, reason) "
-                      "VALUES(?, 'print', 'manual', 'starred')", (iid,))
+            c.execute(
+                "INSERT OR IGNORE INTO picks(image_id, pick_type, source, reason) "
+                "VALUES(?, 'print', 'manual', 'starred')",
+                (iid,),
+            )
             starred = True
         c.commit()
         return jsonify(ok=True, starred=starred)
@@ -479,8 +511,11 @@ def create_app(projects_dir):
         ids = (request.json or {}).get("image_ids") or []
         c = _conn(slug)
         for iid in ids:
-            c.execute("INSERT OR IGNORE INTO picks(image_id, pick_type, source, reason) "
-                      "VALUES(?, 'print', 'manual', 'starred')", (int(iid),))
+            c.execute(
+                "INSERT OR IGNORE INTO picks(image_id, pick_type, source, reason) "
+                "VALUES(?, 'print', 'manual', 'starred')",
+                (int(iid),),
+            )
         c.commit()
         starred = c.execute("SELECT COUNT(*) FROM picks WHERE pick_type='print'").fetchone()[0]
         return jsonify(ok=True, starred=starred)
@@ -495,7 +530,8 @@ def create_app(projects_dir):
             """SELECT i.id, i.path, i.series_id, i.print_score
                FROM picks p JOIN images i ON i.id=p.image_id
                WHERE p.pick_type='print' ORDER BY i.series_id, i.id LIMIT ? OFFSET ?""",
-            (limit, offset)).fetchall()
+            (limit, offset),
+        ).fetchall()
         return _paged([dict(r) for r in rows], total, offset, limit)
 
     @app.post("/api/p/<slug>/prints/export")
@@ -504,9 +540,11 @@ def create_app(projects_dir):
         dest = _safe_dest((request.json or {}).get("dest") or f"./print_exports/{slug}")
         if not dest:
             return jsonify(ok=False, msg="choose a valid destination folder"), 400
-        rows = _conn(slug).execute(
-            "SELECT i.path FROM picks p JOIN images i ON i.id=p.image_id WHERE p.pick_type='print'"
-        ).fetchall()
+        rows = (
+            _conn(slug)
+            .execute("SELECT i.path FROM picks p JOIN images i ON i.id=p.image_id WHERE p.pick_type='print'")
+            .fetchall()
+        )
         os.makedirs(dest, exist_ok=True)
         n = 0
         for r in rows:
@@ -523,7 +561,9 @@ def create_app(projects_dir):
         r = c.execute(
             """SELECT f.*, i.path, i.width, i.height, p.display_name
                FROM faces f JOIN images i ON i.id=f.image_id
-               LEFT JOIN persons p ON p.id=f.person_id WHERE f.id=?""", (fid,)).fetchone()
+               LEFT JOIN persons p ON p.id=f.person_id WHERE f.id=?""",
+            (fid,),
+        ).fetchone()
         if not r:
             abort(404)
         d = dict(r)
@@ -546,13 +586,14 @@ def create_app(projects_dir):
         r = _conn(slug).execute("SELECT thumbnail, path FROM images WHERE id=?", (iid,)).fetchone()
         if not r:
             abort(404)
-        if r["thumbnail"]:                       # fast path: precomputed thumbnail
+        if r["thumbnail"]:  # fast path: precomputed thumbnail
             resp = send_file(io.BytesIO(r["thumbnail"]), mimetype="image/jpeg")
             resp.headers["Cache-Control"] = "public, max-age=86400"
             return resp
-        if not os.path.exists(r["path"]):        # fallback: decode original (pre-v2 rows)
+        if not os.path.exists(r["path"]):  # fallback: decode original (pre-v2 rows)
             abort(404)
         from PIL import Image
+
         im = Image.open(r["path"])
         im.draft("RGB", (640, 640))
         im = im.convert("RGB")

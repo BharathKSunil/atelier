@@ -29,6 +29,7 @@ If the checkpoint cannot be downloaded/built in this environment, `get_embedder`
 raises a loud RuntimeError — but only when RECOGNITION_MODEL='adaface' actually
 selects this path. The default arcface path never imports this module.
 """
+
 import threading
 
 import numpy as np
@@ -43,6 +44,7 @@ _lock = threading.Lock()
 
 def _conv3x3(in_c, out_c, stride=1):
     import torch.nn as nn
+
     return nn.Conv2d(in_c, out_c, 3, stride, 1, bias=False)
 
 
@@ -105,7 +107,7 @@ def _build_ir101():
             )
             units = []
             in_c = 64
-            for depth, n in zip(stage_depths, stage_units):
+            for depth, n in zip(stage_depths, stage_units, strict=False):
                 for j in range(n):
                     stride = 2 if j == 0 else 1
                     units.append(_make_bottleneck(in_c, depth, stride))
@@ -138,17 +140,13 @@ class _AdaFaceEmbedder:
         try:
             from huggingface_hub import hf_hub_download
         except Exception as e:  # pragma: no cover - exercised only when hub missing
-            raise RuntimeError(
-                "AdaFace backend needs huggingface_hub. "
-                "pip install 'huggingface_hub>=0.20'."
-            ) from e
+            raise RuntimeError("AdaFace backend needs huggingface_hub. pip install 'huggingface_hub>=0.20'.") from e
 
         try:
             ckpt_path = hf_hub_download(repo_id=_HF_REPO, filename=_HF_FILE)
         except Exception as e:
             raise RuntimeError(
-                f"AdaFace: could not download IR-101/WebFace12M checkpoint "
-                f"({_HF_REPO}/{_HF_FILE}): {e}"
+                f"AdaFace: could not download IR-101/WebFace12M checkpoint ({_HF_REPO}/{_HF_FILE}): {e}"
             ) from e
 
         try:
@@ -157,7 +155,7 @@ class _AdaFaceEmbedder:
             ckpt = torch.load(ckpt_path, map_location="cpu", weights_only=True)
             raw = ckpt["state_dict"] if isinstance(ckpt, dict) and "state_dict" in ckpt else ckpt
             # Keep backbone (model.*), drop the AdaFace margin head (head.*).
-            state = {k[len("model."):]: v for k, v in raw.items() if k.startswith("model.")}
+            state = {k[len("model.") :]: v for k, v in raw.items() if k.startswith("model.")}
             if not state:
                 raise RuntimeError("checkpoint had no 'model.*' backbone keys")
             net = _build_ir101()
@@ -177,8 +175,8 @@ class _AdaFaceEmbedder:
         if arr.shape[:2] != (112, 112):
             raise ValueError(f"AdaFace expects a 112x112 aligned crop, got {arr.shape}")
         arr = arr.astype(np.float32)
-        arr = (arr / 255.0 - 0.5) / 0.5            # BGR, mean/std 0.5
-        return arr.transpose(2, 0, 1)               # HWC -> CHW
+        arr = (arr / 255.0 - 0.5) / 0.5  # BGR, mean/std 0.5
+        return arr.transpose(2, 0, 1)  # HWC -> CHW
 
     def embed_aligned_batch(self, faces_bgr_112):
         """List of 112x112 BGR aligned crops -> (N,512) L2-normalized float32."""

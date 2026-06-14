@@ -21,7 +21,7 @@ def test_v0_db_upgrades_in_place(tmp_path):
     raw.commit()
     raw.close()
     assert sqlite3.connect(p).execute("PRAGMA user_version").fetchone()[0] == 0
-    c = db.connect(p)   # connect() must migrate
+    c = db.connect(p)  # connect() must migrate
     assert c.execute("PRAGMA user_version").fetchone()[0] == db.SCHEMA_VERSION
     assert "pick_type" in {r[1] for r in c.execute("PRAGMA table_info(picks)")}
 
@@ -29,6 +29,6 @@ def test_v0_db_upgrades_in_place(tmp_path):
 def test_migration_is_idempotent(tmp_path):
     p = str(tmp_path / "y.db")
     db.init_db(p).close()
-    db.connect(p).close()   # second pass must be a no-op, not an error
+    db.connect(p).close()  # second pass must be a no-op, not an error
     c = db.connect(p)
     assert c.execute("PRAGMA user_version").fetchone()[0] == db.SCHEMA_VERSION

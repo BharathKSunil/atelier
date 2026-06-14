@@ -3,6 +3,7 @@
 Signal = EXIF time blocking + global-embedding cosine (use-case 2).
 Items with no timestamp (t=None) merge only on a tighter embed-only cosine.
 """
+
 import numpy as np
 
 
@@ -32,9 +33,7 @@ def group_series(items, time_gap_s, cos_threshold, embed_only_cos):
     # time-sorted; None timestamps sort to the end, stable by id
     order = sorted(
         range(n),
-        key=lambda i: (items[i]["t"] is None,
-                       items[i]["t"] if items[i]["t"] is not None else 0.0,
-                       items[i]["id"]),
+        key=lambda i: (items[i]["t"] is None, items[i]["t"] if items[i]["t"] is not None else 0.0, items[i]["id"]),
     )
 
     # Timestamped frames: union temporally adjacent neighbors (burst behavior).
@@ -44,9 +43,7 @@ def group_series(items, time_gap_s, cos_threshold, embed_only_cos):
         if ti is None or tj is None:
             continue  # timestamp-less frames handled by the O(m^2) pass below
         cos = float(np.dot(items[i]["emb"], items[j]["emb"]))
-        if abs(tj - ti) <= time_gap_s and cos >= cos_threshold:
-            union(i, j)
-        elif cos >= embed_only_cos:
+        if abs(tj - ti) <= time_gap_s and cos >= cos_threshold or cos >= embed_only_cos:
             union(i, j)
 
     # Timestamp-less frames (e.g. PNG) share no temporal order, so adjacency by id

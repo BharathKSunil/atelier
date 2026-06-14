@@ -1,4 +1,5 @@
 """Constants and tunables. No heavy imports — keep this dependency-free."""
+
 import os
 from pathlib import Path
 
@@ -17,15 +18,15 @@ INSIGHTFACE_PROVIDERS = None
 RUN_PHASE_STALL_TIMEOUT_S = 1800
 
 # --- Decode / sizing ---
-ANALYSIS_LONG_EDGE = 1536   # downscale long edge for detection + global embedding
-THUMB_MAX = 256             # stored face thumbnail max edge (px)
-IMAGE_THUMB_MAX = 360       # stored per-image thumbnail max edge (px) — avoids re-decoding originals
+ANALYSIS_LONG_EDGE = 1536  # downscale long edge for detection + global embedding
+THUMB_MAX = 256  # stored face thumbnail max edge (px)
+IMAGE_THUMB_MAX = 360  # stored per-image thumbnail max edge (px) — avoids re-decoding originals
 
 # --- Face detection ---
 # insightface: SCRFD/RetinaFace detector + ArcFace embeddings (buffalo_l) — far fewer
 # false positives (jewelry/skin/blur) and far better clustering than the old MTCNN+FaceNet.
 INSIGHTFACE_MODEL = "buffalo_l"
-INSIGHTFACE_DET_SIZE = 640   # SCRFD standard; larger can MISS frame-filling faces
+INSIGHTFACE_DET_SIZE = 640  # SCRFD standard; larger can MISS frame-filling faces
 
 # Identity-embedding model (A/B switch). Detection always stays SCRFD (insightface);
 # this only swaps what produces the 512-d embedding from the aligned 112x112 crop.
@@ -36,19 +37,19 @@ INSIGHTFACE_DET_SIZE = 640   # SCRFD standard; larger can MISS frame-filling fac
 # and only +0.02 silhouette at ~25% slower — its edge is low-quality faces, which
 # detection already gates out here. ArcFace (CoreML) stays default; flip for sets
 # dominated by blurry/backlit faces, then re-index.
-RECOGNITION_MODEL = "arcface"   # or "adaface"
+RECOGNITION_MODEL = "arcface"  # or "adaface"
 
 # Quality gates applied at index time (reject non-faces before they ever cluster).
 # Tuned from a measured score distribution: SCRFD false-positives on hair/fabric/
 # backs-of-heads land at ~0.60-0.65, real faces at 0.80-0.99.
-FACE_DET_THRESHOLD = 0.65   # min detector confidence (valley between junk and real faces)
+FACE_DET_THRESHOLD = 0.65  # min detector confidence (valley between junk and real faces)
 FACE_DET_AUTO_ACCEPT = 0.80  # >= this -> trust SCRFD (skips the landmark gate, keeps profiles)
 FACE_VERIFY_LANDMARKS = True  # for borderline faces, require MediaPipe to also find a face
-                              # on the crop (hair/fabric have no eye/nose/mouth geometry)
-FACE_MIN_PX = 32            # min bbox side in the analysis image (drops tiny background faces)
-FACE_MIN_SHARPNESS = 0.12   # min squashed sharpness (drops out-of-focus blobs)
+# on the crop (hair/fabric have no eye/nose/mouth geometry)
+FACE_MIN_PX = 32  # min bbox side in the analysis image (drops tiny background faces)
+FACE_MIN_SHARPNESS = 0.12  # min squashed sharpness (drops out-of-focus blobs)
 FACE_MIN_FRONTALITY = 0.35  # min frontality from detector keypoints (drops profiles/ears
-                            # whose embeddings are unreliable and pollute clusters)
+# whose embeddings are unreliable and pollute clusters)
 
 # --- Identity clustering (HDBSCAN over 512-d face embeddings) ---
 HDBSCAN_MIN_CLUSTER = 5
@@ -68,9 +69,9 @@ CLUSTER_MERGE_COSINE = 0.5
 PICK_TYPES = ["group", "aesthetic", "candid"]
 
 # --- Series grouping (use-case 2: same moment / burst) ---
-SERIES_TIME_GAP_S = 10.0       # EXIF gap > this starts a new candidate block
-SERIES_COS_THRESHOLD = 0.88    # global-embedding cosine to merge within a time block
-SERIES_EMBED_ONLY_COS = 0.92   # tighter cosine to merge when timestamps absent (PNG)
+SERIES_TIME_GAP_S = 10.0  # EXIF gap > this starts a new candidate block
+SERIES_COS_THRESHOLD = 0.88  # global-embedding cosine to merge within a time block
+SERIES_EMBED_ONLY_COS = 0.92  # tighter cosine to merge when timestamps absent (PNG)
 
 # --- Per-face quality (use-case 1: best face crop of a person) ---
 # quality = 0.35*sharp + 0.20*bright + 0.25*eye + 0.15*frontal + 0.05*smile
@@ -84,14 +85,14 @@ FACE_W_SMILE = 0.05
 # group-aware: eyes uses MIN over faces (one blink ruins the print)
 PRINT_W_SHARP = 0.40
 PRINT_W_EXPOSURE = 0.20
-PRINT_W_EYES = 0.25     # min(eye_open) over all faces
-PRINT_W_EXPR = 0.15     # mean(smile, frontality) over all faces
-PRINT_DISQUALIFY_SHARP = 0.15   # normalized global sharpness below this => heavy penalty
-PRINT_BLUR_PENALTY = 0.25       # multiply score by this when disqualified
+PRINT_W_EYES = 0.25  # min(eye_open) over all faces
+PRINT_W_EXPR = 0.15  # mean(smile, frontality) over all faces
+PRINT_DISQUALIFY_SHARP = 0.15  # normalized global sharpness below this => heavy penalty
+PRINT_BLUR_PENALTY = 0.25  # multiply score by this when disqualified
 
 # --- Sharpness normalization ---
-SHARPNESS_CAP = 500.0    # legacy hard cap -> [0,1]
-SHARPNESS_SQUASH_K = 150.0   # monotone squash scale: 1 - exp(-var/k)
+SHARPNESS_CAP = 500.0  # legacy hard cap -> [0,1]
+SHARPNESS_SQUASH_K = 150.0  # monotone squash scale: 1 - exp(-var/k)
 
 # --- Aesthetic proxy (heuristic; not a learned model) ---
 AESTHETIC_W_COLOR = 0.40

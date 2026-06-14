@@ -19,7 +19,7 @@ def test_create_list_get_delete(tmp_path):
     proj = projects.create_project(pdir, "My Wedding", str(src), now=1000.0)
     assert proj["slug"] == "my-wedding"
     assert proj["created_at"] == 1000.0
-    assert os.path.exists(projects.db_path(pdir, "my-wedding"))   # DB materialized
+    assert os.path.exists(projects.db_path(pdir, "my-wedding"))  # DB materialized
 
     assert len(projects.list_projects(pdir)) == 1
     assert projects.get_project(pdir, "my-wedding")["name"] == "My Wedding"

@@ -7,6 +7,7 @@ L2-normalize 512-d face embeddings, then HDBSCAN. Non-destructive:
   - manual merge/split/reassign overrides (atelier.overrides) are re-applied after.
 person_id == -1 means noise (browsable but ungrouped).
 """
+
 import argparse
 import sqlite3
 from collections import defaultdict
@@ -23,8 +24,12 @@ def main():
     ap.add_argument("--min-cluster-size", type=int, default=config.HDBSCAN_MIN_CLUSTER)
     ap.add_argument("--min-samples", type=int, default=config.HDBSCAN_MIN_SAMPLES)
     ap.add_argument("--selection-epsilon", type=float, default=config.HDBSCAN_SELECTION_EPSILON)
-    ap.add_argument("--merge-cosine", type=float, default=config.CLUSTER_MERGE_COSINE,
-                    help="merge clusters whose centroids exceed this cosine (0 disables)")
+    ap.add_argument(
+        "--merge-cosine",
+        type=float,
+        default=config.CLUSTER_MERGE_COSINE,
+        help="merge clusters whose centroids exceed this cosine (0 disables)",
+    )
     args = ap.parse_args()
 
     try:
@@ -41,6 +46,7 @@ def main():
     X = X / (np.linalg.norm(X, axis=1, keepdims=True) + 1e-9)
 
     import hdbscan
+
     # euclidean on L2-normalized vectors is monotonic with cosine distance, so
     # this is effectively cosine clustering.
     labels = hdbscan.HDBSCAN(
@@ -59,17 +65,19 @@ def main():
     # capture prior membership + names BEFORE overwriting, to inherit custom names
     prior = {}
     for r in conn.execute(
-            """SELECT f.id fid, f.person_id pid, p.display_name dn, p.notes no
-               FROM faces f JOIN persons p ON p.id=f.person_id WHERE f.person_id>=0"""):
+        """SELECT f.id fid, f.person_id pid, p.display_name dn, p.notes no
+               FROM faces f JOIN persons p ON p.id=f.person_id WHERE f.person_id>=0"""
+    ):
         d = prior.setdefault(r["pid"], {"name": r["dn"], "notes": r["no"], "faces": set()})
         d["faces"].add(r["fid"])
 
     try:
-        conn.executemany("UPDATE faces SET person_id=? WHERE id=?",
-                         [(int(l), fid) for fid, l in zip(ids, labels)])
+        conn.executemany(
+            "UPDATE faces SET person_id=? WHERE id=?", [(int(l), fid) for fid, l in zip(ids, labels, strict=False)]
+        )
 
         new_members = defaultdict(set)
-        for fid, l in zip(ids, labels):
+        for fid, l in zip(ids, labels, strict=False):
             if l >= 0:
                 new_members[int(l)].add(fid)
 
@@ -85,14 +93,12 @@ def main():
                 ov = inter / len(members | d["faces"])
                 if ov > best_ov:
                     best_ov, name, notes = ov, d["name"], d["notes"]
-            conn.execute("INSERT OR IGNORE INTO persons(id, display_name, notes) VALUES(?,?,?)",
-                         (lab, name, notes))
+            conn.execute("INSERT OR IGNORE INTO persons(id, display_name, notes) VALUES(?,?,?)", (lab, name, notes))
         conn.commit()
 
-        overrides.apply_overrides(conn)   # re-impose manual merges/splits
+        overrides.apply_overrides(conn)  # re-impose manual merges/splits
         # drop person rows left empty after a merge collapsed faces onto one cluster
-        conn.execute("DELETE FROM persons WHERE id NOT IN "
-                     "(SELECT DISTINCT person_id FROM faces WHERE person_id >= 0)")
+        conn.execute("DELETE FROM persons WHERE id NOT IN (SELECT DISTINCT person_id FROM faces WHERE person_id >= 0)")
         conn.commit()
 
         n_persons = conn.execute("SELECT COUNT(*) FROM persons").fetchone()[0]
@@ -135,7 +141,7 @@ def _merge_by_centroid(X, labels, cos_threshold):
         return labels
     C = np.stack([X[labels == lab].mean(axis=0) for lab in uniq])
     C = C / (np.linalg.norm(C, axis=1, keepdims=True) + 1e-9)
-    sim = C @ C.T                                   # full pairwise cosine, vectorized
+    sim = C @ C.T  # full pairwise cosine, vectorized
     parent = {lab: lab for lab in uniq}
 
     def find(x):
@@ -144,7 +150,7 @@ def _merge_by_centroid(X, labels, cos_threshold):
             x = parent[x]
         return x
 
-    ai, bj = np.triu_indices(len(uniq), k=1)         # upper triangle only (excl. diagonal)
+    ai, bj = np.triu_indices(len(uniq), k=1)  # upper triangle only (excl. diagonal)
     hits = np.nonzero(sim[ai, bj] >= cos_threshold)[0]
     for p in hits:
         parent[find(uniq[ai[p]])] = find(uniq[bj[p]])

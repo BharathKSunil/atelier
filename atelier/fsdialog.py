@@ -1,4 +1,5 @@
 """Native macOS filesystem helpers (osascript / open). Degrade gracefully off macOS."""
+
 import os
 import shutil
 import subprocess
@@ -22,11 +23,11 @@ def choose_folder(default=None):
         prompt += f' default location POSIX file "{default}"'
     try:
         out = subprocess.run(
-            ["osascript", "-e", f"POSIX path of ({prompt})"],
-            capture_output=True, text=True, timeout=300)
+            ["osascript", "-e", f"POSIX path of ({prompt})"], capture_output=True, text=True, timeout=300
+        )
     except (FileNotFoundError, subprocess.TimeoutExpired):
         return None
-    if out.returncode != 0:        # user pressed Cancel -> osascript exits 1
+    if out.returncode != 0:  # user pressed Cancel -> osascript exits 1
         return None
     path = out.stdout.strip()
     return path or None

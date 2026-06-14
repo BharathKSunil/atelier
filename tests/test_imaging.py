@@ -13,8 +13,8 @@ def test_png_falls_back_to_mtime():
         Image.new("RGB", (8, 8), (120, 120, 120)).save(path)
         img = imaging.load_rgb(path)
         taken_at, exif_time, sub_sec, camera, orient = imaging.read_metadata(path, img)
-        assert exif_time is False          # PNG has no EXIF DateTimeOriginal
-        assert taken_at is not None        # mtime fallback always set
+        assert exif_time is False  # PNG has no EXIF DateTimeOriginal
+        assert taken_at is not None  # mtime fallback always set
         assert abs(taken_at - os.path.getmtime(path)) < 1.0
     finally:
         os.remove(path)
@@ -26,12 +26,12 @@ def test_load_rgb_applies_exif_orientation():
     os.close(fd)
     try:
         portrait = Image.new("RGB", (60, 90), (128, 64, 32))
-        landscape = portrait.rotate(-90, expand=True)   # 90x60, content rotated
+        landscape = portrait.rotate(-90, expand=True)  # 90x60, content rotated
         ex = landscape.getexif()
-        ex[274] = 8                                       # orientation: rotate back
+        ex[274] = 8  # orientation: rotate back
         landscape.save(path, exif=ex)
         loaded = imaging.load_rgb(path)
-        assert loaded.size == (60, 90)                    # restored to upright portrait
+        assert loaded.size == (60, 90)  # restored to upright portrait
     finally:
         os.remove(path)
 

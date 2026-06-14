@@ -5,13 +5,15 @@ releases; this uses the current Tasks API. Returns the same 478-point face-mesh
 topology, so the EAR / frontality / smile landmark indices are unchanged.
 The `.task` model bundle is downloaded once on first use.
 """
+
 import os
 import urllib.request
 
 import numpy as np
 
-_MODEL_URL = ("https://storage.googleapis.com/mediapipe-models/face_landmarker/"
-              "face_landmarker/float16/1/face_landmarker.task")
+_MODEL_URL = (
+    "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task"
+)
 _MODEL_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "models")
 _MODEL_PATH = os.path.join(_MODEL_DIR, "face_landmarker.task")
 
@@ -30,6 +32,7 @@ def get_landmarker():
     if _landmarker is None:
         from mediapipe.tasks import python as mp_python
         from mediapipe.tasks.python import vision
+
         opts = vision.FaceLandmarkerOptions(
             base_options=mp_python.BaseOptions(model_asset_path=_ensure_model()),
             running_mode=vision.RunningMode.IMAGE,
@@ -42,8 +45,8 @@ def get_landmarker():
 def landmarks_px(rgb_array):
     """rgb_array: HxWx3 uint8 RGB. Returns (N, 2) pixel coords, or None if no face."""
     import mediapipe as mp
-    res = get_landmarker().detect(
-        mp.Image(image_format=mp.ImageFormat.SRGB, data=np.ascontiguousarray(rgb_array)))
+
+    res = get_landmarker().detect(mp.Image(image_format=mp.ImageFormat.SRGB, data=np.ascontiguousarray(rgb_array)))
     if not res.face_landmarks:
         return None
     h, w = rgb_array.shape[:2]
@@ -56,4 +59,4 @@ def has_face(rgb_array):
     try:
         return landmarks_px(rgb_array) is not None
     except Exception:
-        return True   # if mediapipe is unavailable, don't block detection
+        return True  # if mediapipe is unavailable, don't block detection
