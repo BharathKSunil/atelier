@@ -567,7 +567,49 @@ h3 {
 .person {
   text-align: center;
   cursor: pointer;
+  position: relative;
   animation: rise 0.4s both;
+}
+.psel {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  z-index: 2;
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+  accent-color: var(--gold);
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.person:hover .psel,
+.person.sel .psel,
+.psel:focus-visible {
+  opacity: 1;
+}
+.person.sel .ring {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 2px var(--gold-soft);
+}
+.select-bar {
+  position: fixed;
+  bottom: 22px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  z-index: 80;
+  background: var(--raised);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 10px 14px 10px 20px;
+  box-shadow: var(--shadow);
+}
+.select-bar span {
+  font-size: 13px;
+  color: var(--ink);
+  white-space: nowrap;
 }
 .person .ring {
   width: 100%;

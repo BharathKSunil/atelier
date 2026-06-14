@@ -5,7 +5,7 @@ import re
 
 import pytest
 
-from atelier import projects
+from atelier import db, projects
 from atelier.server import create_app
 
 
@@ -70,3 +70,28 @@ def test_export_accepts_destination_under_allowed_root(app, client, tmp_path):
     r = client.post("/api/p/demo/persons/0/export", json={"dest": dest}, headers={"X-Atelier-Token": tok})
     assert r.status_code == 200
     assert r.get_json()["ok"] is True
+
+
+def test_export_persons_unions_images_and_contains_dest(app, client, tmp_path):
+    pdir = str(tmp_path / "projects")
+    projects.register_existing(pdir, "demo", str(tmp_path))
+    src = tmp_path / "src"
+    src.mkdir()
+    c = db.connect(projects.db_path(pdir, "demo"))
+    for i in (1, 2, 3):  # person 1 -> images 1,2 ; person 2 -> image 3
+        f = src / f"{i}.jpg"
+        f.write_bytes(b"x")
+        c.execute("INSERT INTO images(id, path, processed) VALUES(?,?,1)", (i, str(f)))
+        c.execute("INSERT INTO faces(id, image_id, person_id) VALUES(?,?,?)", (i, i, 1 if i < 3 else 2))
+    c.commit()
+    c.close()
+    tok = _token(client)
+    dest = str(tmp_path / "projects" / "combined")
+    r = client.post("/api/p/demo/persons/export", json={"ids": [1, 2], "dest": dest}, headers={"X-Atelier-Token": tok})
+    assert r.status_code == 200
+    body = r.get_json()
+    assert body["ok"] and body["count"] == 3  # union of both people's images, deduped
+    bad = client.post(
+        "/api/p/demo/persons/export", json={"ids": [1], "dest": "/etc/x"}, headers={"X-Atelier-Token": tok}
+    )
+    assert bad.status_code == 400  # containment still enforced

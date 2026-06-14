@@ -5,6 +5,7 @@ import { openFaceModal } from "./faces.js";
 let slug = null;
 let observers = [];
 let selected = new Set();
+let gridSel = new Set(); // people ticked on the grid for combined export
 let currentPerson = null;
 let query = "";
 let searchTimer = null;
@@ -51,6 +52,7 @@ function infinite({ root, sentinel, fetchPage, renderItem, onPage }) {
 export function mountPeople(s) {
   slug = s;
   query = "";
+  gridSel = new Set();
   currentPerson = null; // leaving detail view — stale snapshot must not outlive it
   renderPeople();
 }
@@ -61,7 +63,13 @@ function renderPeople() {
   root.innerHTML = `<div class="page-head"><div><div class="eyebrow">Faces grouped by person</div><h1>People</h1></div>
       <div class="spacer"></div>
       <input class="people-search" id="ppl-search" type="search" placeholder="Search people…" spellcheck="false" aria-label="Search people by name" value="${escapeHtml(query)}"></div>
-    <div class="people-grid" id="people-list"></div><div class="sentinel" id="ppl-sentinel"></div>`;
+    <p class="muted" style="margin:-12px 0 18px">Tick people to export everyone's photos into one folder to zip and share.</p>
+    <div class="people-grid" id="people-list"></div><div class="sentinel" id="ppl-sentinel"></div>
+    <div class="select-bar hidden" id="ppl-bar">
+      <span id="ppl-bar-n">0 selected</span>
+      <button class="btn ghost" id="ppl-bar-clear">Clear</button>
+      <button class="btn" id="ppl-bar-export">Export photos…</button>
+    </div>`;
 
   const searchEl = document.getElementById("ppl-search");
   searchEl.oninput = () => {
@@ -73,7 +81,47 @@ function renderPeople() {
       loadGrid(); // reset paging for the new query
     }, 200);
   };
+  document.getElementById("ppl-bar-export").onclick = exportSelectedPeople;
+  document.getElementById("ppl-bar-clear").onclick = () => {
+    gridSel.clear();
+    loadGrid();
+    updateExportBar();
+  };
   loadGrid();
+}
+
+function updateExportBar() {
+  const bar = document.getElementById("ppl-bar");
+  if (!bar) return;
+  const n = gridSel.size;
+  bar.classList.toggle("hidden", n === 0);
+  const lbl = document.getElementById("ppl-bar-n");
+  if (lbl) lbl.textContent = `${n} ${n === 1 ? "person" : "people"} selected`;
+}
+
+async function exportSelectedPeople() {
+  if (!gridSel.size) return;
+  let r;
+  try {
+    r = await post("/api/fs/choose", {});
+  } catch {
+    return;
+  }
+  if (!r || !r.ok || !r.path) {
+    if (r && r.unavailable) toast(r.msg, true);
+    return; // cancelled
+  }
+  toast("Copying originals…");
+  try {
+    const res = await post(`/api/p/${slug}/persons/export`, { ids: [...gridSel], dest: r.path });
+    if (!res.ok) return toast(res.msg || "export failed", true);
+    toast(`Copied ${res.count} photos from ${gridSel.size} people → ${res.dest}`);
+    gridSel.clear();
+    loadGrid();
+    updateExportBar();
+  } catch {
+    toast("Export failed", true);
+  }
 }
 
 function loadGrid() {
@@ -96,11 +144,12 @@ function loadGrid() {
       const name = p.display_name || `Person ${p.id}`;
       const alt = `${name}, ${p.cnt} photo${p.cnt === 1 ? "" : "s"}`;
       const el = document.createElement("div");
-      el.className = "person";
+      el.className = "person" + (gridSel.has(p.id) ? " sel" : "");
       el.setAttribute("role", "button");
       el.setAttribute("tabindex", "0");
       el.setAttribute("aria-label", alt);
-      el.innerHTML = `<div class="ring"><img loading="lazy" src="${p.best_face ? `/api/p/${slug}/thumb/${p.best_face}` : ""}" alt="${escapeHtml(alt)}"></div>
+      el.innerHTML = `<input type="checkbox" class="psel" aria-label="Select ${escapeHtml(name)} for export"${gridSel.has(p.id) ? " checked" : ""}>
+        <div class="ring"><img loading="lazy" src="${p.best_face ? `/api/p/${slug}/thumb/${p.best_face}` : ""}" alt="${escapeHtml(alt)}"></div>
         <div class="nm">${escapeHtml(name)}</div><div class="ct">${p.cnt} photos</div>`;
       const open = () => openPerson(p);
       el.onclick = open;
@@ -109,6 +158,14 @@ function loadGrid() {
           e.preventDefault();
           open();
         }
+      };
+      const chk = el.querySelector(".psel");
+      chk.onclick = (e) => {
+        e.stopPropagation();
+        if (chk.checked) gridSel.add(p.id);
+        else gridSel.delete(p.id);
+        el.classList.toggle("sel", chk.checked);
+        updateExportBar();
       };
       list.appendChild(el);
     },

@@ -398,6 +398,39 @@ def create_app(projects_dir):
                     pass
         return jsonify(ok=True, count=n, total=len(paths), dest=dest)
 
+    @app.post("/api/p/<slug>/persons/export")
+    def export_persons(slug):
+        """Copy the originals of every image that ANY of the given people appear in
+        into one folder (deduped) — for zipping and sharing."""
+        _require(slug)
+        body = request.json or {}
+        ids = [int(x) for x in (body.get("ids") or [])]
+        dest = _safe_dest(body.get("dest"))
+        if not ids:
+            return jsonify(ok=False, msg="no people selected"), 400
+        if not dest:
+            return jsonify(ok=False, msg="choose a valid destination folder"), 400
+        c = _conn(slug)
+        ph = ",".join("?" * len(ids))
+        paths = [
+            r["path"]
+            for r in c.execute(
+                f"""SELECT DISTINCT i.path FROM images i JOIN faces f ON f.image_id=i.id
+                    WHERE f.person_id IN ({ph})""",
+                ids,
+            )
+        ]
+        os.makedirs(dest, exist_ok=True)
+        n = 0
+        for p in paths:
+            if os.path.exists(p):
+                try:
+                    shutil.copy2(p, os.path.join(dest, os.path.basename(p)))
+                    n += 1
+                except OSError:
+                    pass
+        return jsonify(ok=True, count=n, total=len(paths), dest=dest)
+
     # ----- series -----
     @app.get("/api/p/<slug>/series")
     def series_list(slug):
