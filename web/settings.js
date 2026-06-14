@@ -13,7 +13,13 @@ let values = {};
 
 export async function mountSettings(s) {
   slug = s;
-  const data = await api(`/api/p/${slug}/settings`);
+  let data;
+  try { data = await api(`/api/p/${slug}/settings`); }
+  catch {
+    document.getElementById("settings-root").innerHTML =
+      `<div class="empty"><div class="big">Couldn’t load settings</div>Check the connection and try again.</div>`;
+    return;
+  }
   spec = data.spec || [];
   values = data.values || {};
   render();
@@ -65,21 +71,27 @@ function knob(k) {
 }
 
 function putValues() {
-  return fetch(`/api/p/${slug}/settings`, {
+  return api(`/api/p/${slug}/settings`, {
     method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ values }),
-  }).then((r) => r.json());
+  });
 }
 
 async function saveOnly() {
-  await putValues();
-  toast("Settings saved");
+  try { await putValues(); toast("Settings saved"); }
+  catch { toast("Could not save settings", true); }
 }
 
 async function applyGroup(group) {
-  await putValues();
   const act = GROUP_ACTION[group];
+  // A full re-index re-detects every photo — gate it behind an explicit confirm.
+  if (act && act.affects === "reindex" &&
+      !confirm("Re-index all photos? This can take a while.")) return;
+  try { await putValues(); }
+  catch { return toast("Could not save settings", true); }
   if (!act) { toast("Saved"); return; }
-  const r = await post(`/api/p/${slug}/run`, { affects: act.affects });
+  let r;
+  try { r = await post(`/api/p/${slug}/run`, { affects: act.affects }); }
+  catch { return toast("Could not start re-run", true); }
   if (!r.ok) return toast(r.msg || "could not start", true);
   toast(`Saved — ${act.affects} started`);
   location.hash = `#/p/${slug}/run`;

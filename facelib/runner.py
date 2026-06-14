@@ -9,6 +9,9 @@ import threading
 import time
 
 from . import db
+from .logsetup import get_logger
+
+_log_mod = get_logger("atelier.runner")
 
 PHASES = [
     ("index",   "01_index.py", lambda folder, dbp: ["--photos", folder, "--db", dbp]),
@@ -78,6 +81,8 @@ class Runner:
             for name, script, build_args in self._phases:
                 self.state["phase"] = name
                 self._log(f"=== phase: {name} ===")
+                _log_mod.info("phase %s started", name)
+                t0 = time.monotonic()
                 cmd = [sys.executable, script, *build_args(folder, self.db_path),
                        *self._flags.get(name, [])]
                 proc = subprocess.Popen(
@@ -86,6 +91,9 @@ class Runner:
                 for line in proc.stdout:
                     self._log(line.rstrip())
                 proc.wait()
+                dt = time.monotonic() - t0
+                self._log(f"phase {name} finished in {dt:.1f}s (exit {proc.returncode})")
+                _log_mod.info("phase %s finished in %.1fs (exit %d)", name, dt, proc.returncode)
                 if proc.returncode != 0:
                     self.state["error"] = f"phase '{name}' exited with code {proc.returncode}"
                     self._log(f"!! {self.state['error']}")

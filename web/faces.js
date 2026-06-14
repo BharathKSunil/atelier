@@ -42,12 +42,18 @@ export async function openFaceModal(slug, fid) {
   const box = document.getElementById("face-box");
   box.innerHTML = `<p class="muted">Loading…</p>`;
   document.getElementById("modal-face").classList.remove("hidden");
-  const f = await api(`/api/p/${slug}/face/${fid}`);
+  let f;
+  try { f = await api(`/api/p/${slug}/face/${fid}`); }
+  catch {
+    box.innerHTML = `<button class="modal-x" id="face-x" aria-label="Close">&times;</button><p class="muted">Could not load this face.</p>`;
+    box.querySelector("#face-x").onclick = () => document.getElementById("modal-face").classList.add("hidden");
+    return;
+  }
   const name = f.display_name || (f.person_id >= 0 ? `Person ${f.person_id}` : "Ungrouped");
   box.innerHTML = `
-    <button class="modal-x" id="face-x">&times;</button>
+    <button class="modal-x" id="face-x" aria-label="Close">&times;</button>
     <div class="face-detail">
-      <img class="face-crop" src="/api/p/${slug}/thumb/${f.id}" alt="">
+      <img class="face-crop" src="/api/p/${slug}/thumb/${f.id}" alt="${escapeHtml(name)}, quality ${pct(f.quality_score)}">
       <div class="face-meta">
         <div class="eyebrow">Face</div><h3>${escapeHtml(name)}</h3>
         <div class="kv"><span>Detection confidence</span><b>${pct(f.confidence)}</b></div>
@@ -69,8 +75,10 @@ export async function openFaceModal(slug, fid) {
   box.querySelector("#face-open").onclick = () =>
     openLightbox([{ src: `/api/p/${slug}/image/${f.image_id}`, cap: base(f.path) }]);
   box.querySelector("#face-reveal").onclick = async () => {
-    const r = await post("/api/fs/reveal", { path: f.path });
-    toast(r.ok ? "Revealed in Finder" : "Could not reveal file", !r.ok);
+    try {
+      const r = await post("/api/fs/reveal", { path: f.path });
+      toast(r.ok ? "Revealed in Finder" : "Could not reveal file", !r.ok);
+    } catch { toast("Could not reveal file", true); }
   };
 }
 document.getElementById("modal-face").addEventListener("click", (e) => {

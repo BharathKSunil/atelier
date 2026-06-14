@@ -1,12 +1,28 @@
 // Live run console: phase steps, progress, streaming log, live face grid.
-import { api, post } from "./api.js";
+import { api, post, toast } from "./api.js";
 
 let timer = null;
 let slug = null;
+let paused = false;
 
 export function mountRun(s) {
   slug = s;
-  document.getElementById("run-again").onclick = async () => { await post(`/api/p/${slug}/run`, {}); poll(); };
+  paused = false;
+  document.getElementById("run-again").onclick = async () => {
+    try { await post(`/api/p/${slug}/run`, {}); }
+    catch { toast("Could not start run", true); return; }
+    poll();
+  };
+  const pauseBtn = document.getElementById("run-pause");
+  if (pauseBtn) {
+    syncPauseBtn();
+    pauseBtn.onclick = () => {
+      paused = !paused;
+      syncPauseBtn();
+      if (!paused) poll();           // resume immediately
+      else { clearTimeout(timer); timer = null; }
+    };
+  }
   poll();
 }
 export function unmountRun() {
@@ -14,17 +30,22 @@ export function unmountRun() {
   timer = null;
 }
 
+function syncPauseBtn() {
+  const b = document.getElementById("run-pause");
+  if (b) { b.textContent = paused ? "Resume updates" : "Pause updates"; b.classList.toggle("accent", paused); }
+}
+
 async function poll() {
-  if (!slug) return;
+  if (!slug || paused) return;
   const me = slug;
   let s;
   try {
     s = await api(`/api/p/${me}/run/status`);
   } catch {
-    if (slug === me) { clearTimeout(timer); timer = setTimeout(poll, 3000); }  // retry, don't freeze
+    if (slug === me && !paused) { clearTimeout(timer); timer = setTimeout(poll, 3000); }  // retry, don't freeze
     return;
   }
-  if (slug !== me) return;
+  if (slug !== me || paused) return;
   render(s);
   clearTimeout(timer);
   if (s.running) timer = setTimeout(poll, 1200);
@@ -60,11 +81,13 @@ function render(s) {
   if (s.error) { err.textContent = s.error; err.classList.remove("hidden"); } else err.classList.add("hidden");
 
   const log = document.getElementById("run-log");
+  // only stick to the bottom if the user was already there — don't yank a scrolled-up view
+  const atBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 24;
   log.textContent = (s.log || []).join("\n");
-  log.scrollTop = log.scrollHeight;
+  if (atBottom) log.scrollTop = log.scrollHeight;
 
   document.getElementById("live-face-count").textContent = s.faces_found || 0;
   document.getElementById("live-face-grid").innerHTML = (s.recent_face_ids || [])
-    .map((id) => `<img loading="lazy" src="/api/p/${slug}/thumb/${id}" alt="">`).join("");
+    .map((id) => `<img loading="lazy" src="/api/p/${slug}/thumb/${id}" alt="Recently detected face">`).join("");
   document.getElementById("run-again").classList.toggle("hidden", s.running);
 }

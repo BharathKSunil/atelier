@@ -97,11 +97,24 @@ def detect_and_embed(pil_img, device):
     if config.FACE_BACKEND == "insightface":
         app = insight_app()
         bgr = np.ascontiguousarray(np.asarray(pil_img)[:, :, ::-1])   # RGB->BGR
+        faces = app.get(bgr)
+        if config.RECOGNITION_MODEL == "adaface":
+            # Keep SCRFD detection + its 5-pt landmarks, but re-align each face with the
+            # standard ArcFace similarity transform and embed it with AdaFace IR-101.
+            from insightface.utils.face_align import norm_crop
+
+            from . import recognition
+            embedder = recognition.get_embedder(device)
+            return [{"bbox": tuple(float(v) for v in f.bbox),
+                     "score": float(f.det_score),
+                     "embedding": embedder.embed_aligned(norm_crop(bgr, f.kps)),
+                     "kps": np.asarray(f.kps, dtype=np.float64)}
+                    for f in faces]
         return [{"bbox": tuple(float(v) for v in f.bbox),
                  "score": float(f.det_score),
                  "embedding": f.normed_embedding.astype(np.float32),
                  "kps": np.asarray(f.kps, dtype=np.float64)}   # 5 pts: eyes, nose, mouth
-                for f in app.get(bgr)]
+                for f in faces]
     # legacy MTCNN + FaceNet
     boxes, probs, _ = detect_faces(pil_img, device)
     if boxes is None or len(boxes) == 0:

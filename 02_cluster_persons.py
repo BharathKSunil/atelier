@@ -8,11 +8,13 @@ L2-normalize 512-d face embeddings, then HDBSCAN. Non-destructive:
 person_id == -1 means noise (browsable but ungrouped).
 """
 import argparse
+import sqlite3
 from collections import defaultdict
 
 import numpy as np
 
 from facelib import config, db, overrides
+from facelib.errors import DatabaseError
 
 
 def main():
@@ -25,8 +27,11 @@ def main():
                     help="merge clusters whose centroids exceed this cosine (0 disables)")
     args = ap.parse_args()
 
-    conn = db.connect(args.db)
-    rows = list(conn.execute("SELECT id, embedding FROM faces WHERE embedding IS NOT NULL"))
+    try:
+        conn = db.connect(args.db)
+        rows = list(conn.execute("SELECT id, embedding FROM faces WHERE embedding IS NOT NULL"))
+    except sqlite3.Error as e:
+        raise DatabaseError(f"failed reading faces from {args.db}: {e}") from e
     if not rows:
         print("no faces — run 01_index.py first")
         return
@@ -36,6 +41,8 @@ def main():
     X = X / (np.linalg.norm(X, axis=1, keepdims=True) + 1e-9)
 
     import hdbscan
+    # euclidean on L2-normalized vectors is monotonic with cosine distance, so
+    # this is effectively cosine clustering.
     labels = hdbscan.HDBSCAN(
         min_cluster_size=args.min_cluster_size,
         min_samples=args.min_samples,
@@ -57,39 +64,63 @@ def main():
         d = prior.setdefault(r["pid"], {"name": r["dn"], "notes": r["no"], "faces": set()})
         d["faces"].add(r["fid"])
 
-    conn.executemany("UPDATE faces SET person_id=? WHERE id=?",
-                     [(int(l), fid) for fid, l in zip(ids, labels)])
+    try:
+        conn.executemany("UPDATE faces SET person_id=? WHERE id=?",
+                         [(int(l), fid) for fid, l in zip(ids, labels)])
 
-    new_members = defaultdict(set)
-    for fid, l in zip(ids, labels):
-        if l >= 0:
-            new_members[int(l)].add(fid)
+        new_members = defaultdict(set)
+        for fid, l in zip(ids, labels):
+            if l >= 0:
+                new_members[int(l)].add(fid)
 
-    conn.execute("DELETE FROM persons")
-    for lab, members in new_members.items():
-        name, notes, best_ov = f"Person {lab}", None, 0.0
-        for d in prior.values():
-            if not d["name"] or d["name"].startswith("Person "):
-                continue
-            inter = len(members & d["faces"])
-            if not inter:
-                continue
-            ov = inter / len(members | d["faces"])
-            if ov > best_ov:
-                best_ov, name, notes = ov, d["name"], d["notes"]
-        conn.execute("INSERT OR IGNORE INTO persons(id, display_name, notes) VALUES(?,?,?)",
-                     (lab, name, notes))
-    conn.commit()
+        conn.execute("DELETE FROM persons")
+        for lab, members in new_members.items():
+            name, notes, best_ov = f"Person {lab}", None, 0.0
+            for d in prior.values():
+                if not d["name"] or d["name"].startswith("Person "):
+                    continue
+                inter = len(members & d["faces"])
+                if not inter:
+                    continue
+                ov = inter / len(members | d["faces"])
+                if ov > best_ov:
+                    best_ov, name, notes = ov, d["name"], d["notes"]
+            conn.execute("INSERT OR IGNORE INTO persons(id, display_name, notes) VALUES(?,?,?)",
+                         (lab, name, notes))
+        conn.commit()
 
-    overrides.apply_overrides(conn)   # re-impose manual merges/splits
-    # drop person rows left empty after a merge collapsed faces onto one cluster
-    conn.execute("DELETE FROM persons WHERE id NOT IN "
-                 "(SELECT DISTINCT person_id FROM faces WHERE person_id >= 0)")
-    conn.commit()
+        overrides.apply_overrides(conn)   # re-impose manual merges/splits
+        # drop person rows left empty after a merge collapsed faces onto one cluster
+        conn.execute("DELETE FROM persons WHERE id NOT IN "
+                     "(SELECT DISTINCT person_id FROM faces WHERE person_id >= 0)")
+        conn.commit()
 
-    n_persons = conn.execute("SELECT COUNT(*) FROM persons").fetchone()[0]
+        n_persons = conn.execute("SELECT COUNT(*) FROM persons").fetchone()[0]
+    except sqlite3.Error as e:
+        raise DatabaseError(f"failed writing clusters to {args.db}: {e}") from e
     n_noise = int((labels == -1).sum())
     print(f"{n_persons} persons over {len(ids)} faces ({n_noise} noise)")
+    print(f"silhouette: {_silhouette(X, labels)}")
+
+
+def _silhouette(X, labels):
+    """Mean silhouette over non-noise points (sampled to <=5000), or 'n/a'.
+
+    Higher is better; helps operators tune min_cluster_size/min_samples.
+    """
+    try:
+        from sklearn.metrics import silhouette_score
+
+        mask = labels >= 0
+        Xc, lc = X[mask], labels[mask]
+        if len(set(lc.tolist())) < 2:
+            return "n/a"
+        if len(lc) > 5000:
+            idx = np.random.default_rng(0).choice(len(lc), 5000, replace=False)
+            Xc, lc = Xc[idx], lc[idx]
+        return f"{silhouette_score(Xc, lc):.3f}"
+    except Exception:  # noqa: BLE001
+        return "n/a"
 
 
 def _merge_by_centroid(X, labels, cos_threshold):

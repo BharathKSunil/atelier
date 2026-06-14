@@ -25,6 +25,13 @@ FACE_BACKEND = "insightface"
 INSIGHTFACE_MODEL = "buffalo_l"
 INSIGHTFACE_DET_SIZE = 640   # SCRFD standard; larger can MISS frame-filling faces
 
+# Identity-embedding model (A/B switch). Detection always stays SCRFD (insightface);
+# this only swaps what produces the 512-d embedding from the aligned 112x112 crop.
+# "arcface"  = insightface buffalo_l ArcFace embedding (default, unchanged behavior).
+# "adaface"  = mk-minchul AdaFace IR-101 / WebFace12M (quality-adaptive; better on
+#              low-quality / varied-pose wedding faces). See facelib/recognition.py.
+RECOGNITION_MODEL = "arcface"   # or "adaface"
+
 # Quality gates applied at index time (reject non-faces before they ever cluster):
 FACE_DET_THRESHOLD = 0.60   # min detector confidence (drops jewelry/skin false positives)
 FACE_MIN_PX = 32            # min bbox side in the analysis image (drops tiny background faces)

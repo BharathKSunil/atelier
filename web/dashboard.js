@@ -4,7 +4,13 @@ import { api, post, del, escapeHtml, base, toast } from "./api.js";
 export async function renderDashboard() {
   const wrap = document.getElementById("project-cards");
   wrap.innerHTML = `<p class="muted">Loading…</p>`;
-  const projects = await api("/api/projects");
+  let projects;
+  try { projects = await api("/api/projects"); }
+  catch {
+    wrap.innerHTML = `<div class="empty"><div class="big">Couldn’t reach the server</div>
+      Make sure Atelier is running, then reload.</div>`;
+    return;
+  }
   if (!projects.length) {
     wrap.innerHTML = `<div class="empty"><div class="big">No projects yet</div>
       Create one to index a folder of photos.</div>`;
@@ -15,7 +21,7 @@ export async function renderDashboard() {
     const s = p.stats || {};
     const cover = (p.cover || []).length
       ? `<div class="cover">${p.cover.slice(0, 5).map((id) =>
-          `<img loading="lazy" src="/api/p/${p.slug}/image_thumb/${id}" alt="">`).join("")}</div>`
+          `<img loading="lazy" src="/api/p/${p.slug}/image_thumb/${id}" alt="Photo from ${escapeHtml(p.name)}">`).join("")}</div>`
       : `<div class="cover empty">${p.running ? "indexing…" : "no photos yet"}</div>`;
     const card = document.createElement("div");
     card.className = "proj-card";
@@ -39,7 +45,9 @@ export async function renderDashboard() {
     card.querySelector(".del").onclick = async (e) => {
       e.stopPropagation();
       if (!confirm(`Delete “${p.name}”? Removes its database only — originals untouched.`)) return;
-      const r = await del(`/api/projects/${p.slug}`);
+      let r;
+      try { r = await del(`/api/projects/${p.slug}`); }
+      catch { return toast("Could not delete project", true); }
       if (!r.ok) return toast(r.msg || "could not delete", true);
       renderDashboard();
     };
@@ -56,9 +64,11 @@ document.getElementById("np-cancel").addEventListener("click", closeM);
 document.getElementById("np-cancel-x").addEventListener("click", closeM);
 modal().addEventListener("click", (e) => { if (e.target.id === "modal-new") closeM(); });
 document.getElementById("np-choose").addEventListener("click", async () => {
-  const r = await post("/api/fs/choose", {});
-  if (r.ok) document.getElementById("np-folder").value = r.path;
-  else if (r.msg && r.msg !== "cancelled or unavailable") toast(r.msg, true);
+  try {
+    const r = await post("/api/fs/choose", {});
+    if (r.ok) document.getElementById("np-folder").value = r.path;
+    else if (r.msg && r.msg !== "cancelled or unavailable") toast(r.msg, true);
+  } catch { toast("Could not open folder picker", true); }
 });
 document.getElementById("np-create").addEventListener("click", async () => {
   const name = document.getElementById("np-name").value.trim();
@@ -66,7 +76,9 @@ document.getElementById("np-create").addEventListener("click", async () => {
   if (!name || !folder) return toast("Name and folder are both required", true);
   const btn = document.getElementById("np-create");
   btn.disabled = true;
-  const r = await post("/api/projects", { name, folder });
+  let r;
+  try { r = await post("/api/projects", { name, folder }); }
+  catch { btn.disabled = false; return toast("Could not create project", true); }
   btn.disabled = false;
   if (!r.ok) return toast(r.msg || "could not create project", true);
   closeM();

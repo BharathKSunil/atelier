@@ -35,6 +35,7 @@ export async function mountReview(s) {
   document.getElementById("rv-prev").onclick = () => step(-1);
   document.getElementById("rv-next").onclick = () => step(1);
   document.getElementById("rv-star").onclick = star;
+  document.getElementById("rv-star-rec").onclick = starRecommended;
   document.getElementById("rv-fs").onclick = toggleFullscreen;
 
   if (!series.length) {
@@ -102,13 +103,67 @@ function render() {
     const chips = (byImg[f.id] || [])
       .map((p) => `<span class="ftag crit ${p.source}">${META[p.t].label}</span>`).join("")
       + (f.is_print ? `<span class="ftag print">★ Print</span>` : "");
-    return `<div class="frame-thumb ${f.id === heroId ? "cur" : ""} ${f.is_print ? "star" : ""}" data-id="${f.id}">
-      <img loading="lazy" src="/api/p/${slug}/image_thumb/${f.id}" alt="">
+    const alt = `Frame, print score ${pct(f.print_score)}${f.is_print ? ", in print list" : ""}`;
+    return `<div class="frame-thumb ${f.id === heroId ? "cur" : ""} ${f.is_print ? "star" : ""}" data-id="${f.id}"
+      role="button" tabindex="0" aria-label="${alt}" aria-pressed="${f.id === heroId}">
+      <img loading="lazy" src="/api/p/${slug}/image_thumb/${f.id}" alt="${alt}">
       <div class="tags">${chips}</div></div>`;
   }).join("");
   document.querySelectorAll("#rv-strip .frame-thumb").forEach((el) => {
-    el.onclick = () => { heroId = +el.dataset.id; render(); el.scrollIntoView({ block: "nearest", inline: "center" }); };
+    const activate = (e) => {
+      const id = +el.dataset.id;
+      if (e && e.shiftKey) { rangeStar(id); return; }
+      heroId = id; render();
+      const cur = document.querySelector(`#rv-strip .frame-thumb[data-id="${heroId}"]`);
+      if (cur) cur.scrollIntoView({ block: "nearest", inline: "center" });
+    };
+    el.onclick = activate;
+    el.onkeydown = (e) => {
+      if (e.key === "Enter" || e.key === " " || e.key === "Spacebar") { e.preventDefault(); activate(e); }
+    };
   });
+}
+
+// Star every frame from the current hero up to (and including) the clicked frame, in filmstrip order.
+async function rangeStar(targetId) {
+  const list = displayFrames.length ? displayFrames : frames;
+  let a = list.findIndex((f) => f.id === heroId);
+  let b = list.findIndex((f) => f.id === targetId);
+  if (a < 0 || b < 0) return;
+  if (a > b) [a, b] = [b, a];
+  const slice = list.slice(a, b + 1);
+  const ids = slice.filter((f) => !f.is_print).map((f) => f.id);
+  if (!ids.length) { toast("Already in print list"); return; }
+  let ok = false;
+  try {
+    await post(`/api/p/${slug}/star_many`, { image_ids: ids });
+    ok = true;
+  } catch {
+    // fall back to individual stars
+    for (const id of ids) {
+      try { await post(`/api/p/${slug}/star/${id}`, {}); ok = true; } catch {}
+    }
+  }
+  if (!ok) { toast("Could not star range", true); return; }
+  slice.forEach((f) => { f.is_print = true; });
+  toast(`Starred ${ids.length} frame${ids.length > 1 ? "s" : ""}`);
+  render();
+}
+
+// Star the burst's recommended group auto-pick.
+async function starRecommended() {
+  const recId = picks.group && picks.group.image_id;
+  if (!recId) { toast("No recommended frame for this burst", true); return; }
+  const f = frames.find((x) => x.id === recId);
+  if (f && f.is_print) { toast("Recommended frame already in print list"); return; }
+  try {
+    const r = await post(`/api/p/${slug}/star/${recId}`, {});
+    if (f) f.is_print = r.starred;
+    toast(r.starred ? "Starred recommended frame" : "Removed recommended frame");
+    render();
+  } catch {
+    toast("Could not star recommended frame", true);
+  }
 }
 
 async function step(d) {
@@ -153,7 +208,7 @@ function onKey(e) {
   if (document.querySelector(".modal:not(.hidden)")) return;
   const k = e.key;
   if (k === "ArrowLeft") { e.preventDefault(); step(-1); }
-  else if (k === "ArrowRight") { e.preventDefault(); step(1); }
+  else if (k === "ArrowRight" || k === "x" || k === "X") { e.preventDefault(); step(1); }
   else if (k === "ArrowUp") { e.preventDefault(); moveHero(-1); }
   else if (k === "ArrowDown") { e.preventDefault(); moveHero(1); }
   else if (k === "f" || k === "F") toggleFullscreen();

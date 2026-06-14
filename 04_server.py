@@ -10,8 +10,10 @@ import argparse
 import io
 import os
 import shutil
+import sqlite3
 
 from flask import Flask, abort, jsonify, request, send_file, send_from_directory
+from werkzeug.exceptions import HTTPException
 
 from facelib import config, db, fsdialog, migrate, overrides, projects, settings
 from facelib.runner import get_runner
@@ -165,13 +167,22 @@ def create_app(projects_dir):
         _require(slug)
         c = _conn(slug)
         offset, limit = _page()
-        total = c.execute("SELECT COUNT(*) FROM persons").fetchone()[0]
+        q = (request.args.get("q") or "").strip()
+        where = ""
+        params = []
+        if q:
+            where = "WHERE p.display_name LIKE '%'||?||'%' COLLATE NOCASE"
+            params.append(q)
+        total = c.execute(
+            f"SELECT COUNT(*) FROM persons p {where}", params).fetchone()[0]
         rows = c.execute(
-            """SELECT p.id, p.display_name, COUNT(f.id) cnt,
+            f"""SELECT p.id, p.display_name, COUNT(f.id) cnt,
                  (SELECT id FROM faces WHERE person_id=p.id
                   ORDER BY is_best DESC, quality_score DESC LIMIT 1) best_face
                FROM persons p LEFT JOIN faces f ON f.person_id=p.id
-               GROUP BY p.id ORDER BY cnt DESC LIMIT ? OFFSET ?""", (limit, offset)).fetchall()
+               {where}
+               GROUP BY p.id ORDER BY cnt DESC LIMIT ? OFFSET ?""",
+            (*params, limit, offset)).fetchall()
         return _paged([dict(r) for r in rows], total, offset, limit)
 
     @app.get("/api/p/<slug>/persons/<int:pid>/faces")
@@ -206,10 +217,12 @@ def create_app(projects_dir):
     @app.post("/api/p/<slug>/persons/<int:pid>/split")
     def split_person(slug, pid):
         _require(slug)
-        face_ids = (request.json or {}).get("face_ids") or []
+        body = request.json or {}
+        face_ids = body.get("face_ids") or []
         if not face_ids:
             return jsonify(ok=False, msg="no faces selected"), 400
-        gk = overrides.split_person(_conn(slug), [int(x) for x in face_ids])
+        name = (body.get("name") or "").strip() or None
+        gk = overrides.split_person(_conn(slug), [int(x) for x in face_ids], name=name)
         return jsonify(ok=True, group=gk)
 
     @app.post("/api/p/<slug>/faces/<int:fid>/reassign")
@@ -312,6 +325,18 @@ def create_app(projects_dir):
         c.commit()
         return jsonify(ok=True, starred=starred)
 
+    @app.post("/api/p/<slug>/star_many")
+    def star_many(slug):
+        _require(slug)
+        ids = (request.json or {}).get("image_ids") or []
+        c = _conn(slug)
+        for iid in ids:
+            c.execute("INSERT OR IGNORE INTO picks(image_id, pick_type, source, reason) "
+                      "VALUES(?, 'print', 'manual', 'starred')", (int(iid),))
+        c.commit()
+        starred = c.execute("SELECT COUNT(*) FROM picks WHERE pick_type='print'").fetchone()[0]
+        return jsonify(ok=True, starred=starred)
+
     @app.get("/api/p/<slug>/prints")
     def prints(slug):
         _require(slug)
@@ -404,6 +429,17 @@ def create_app(projects_dir):
         out = os.path.join(dest, os.path.basename(r["path"]))
         shutil.copy2(r["path"], out)
         return jsonify(ok=True, path=os.path.abspath(out))
+
+    # ----- JSON error handling (no raw HTML 500s) -----
+    @app.errorhandler(sqlite3.Error)
+    def handle_sqlite_error(e):
+        return jsonify(ok=False, error=str(e)), 500
+
+    @app.errorhandler(Exception)
+    def handle_exception(e):
+        if isinstance(e, HTTPException):
+            return e
+        return jsonify(ok=False, error=str(e)), 500
 
     return app
 
