@@ -20,20 +20,14 @@ to run the pipeline end to end.
 
 ## Checks
 
-Python (covered by `make install-dev`):
-
 ```bash
-make lint    # ruff format --check + ruff check
+make lint    # ruff (format-check + check) + eslint + prettier  (web part runs if Node is present)
 make test    # pytest -q
-make format  # auto-fix: ruff format + ruff check --fix
+make format  # auto-fix: ruff format + ruff --fix + eslint --fix + prettier --write
 ```
 
-Web SPA (needs Node — run `npm install` once):
-
-```bash
-make lint-web    # eslint + prettier --check
-make format-web  # eslint --fix + prettier --write
-```
+`make lint`/`make format` cover both Python and the web SPA. The web half needs
+Node — run `npm install` once; without Node it's skipped with a note.
 
 Optional git hooks (auto-runs ruff + ruff-format on commit):
 
