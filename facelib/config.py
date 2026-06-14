@@ -50,7 +50,9 @@ HDBSCAN_MIN_SAMPLES = 1
 # defaults (off); raise per-project. epsilon merges density-similar fragments;
 # CLUSTER_MERGE_COSINE runs a centroid-cosine merge post-pass (e.g. 0.93).
 HDBSCAN_SELECTION_EPSILON = 0.0
-CLUSTER_MERGE_COSINE = 0.0
+# Centroid-cosine merge post-pass: collapses same-person fragments split across
+# lighting/pose. 0.5 measured best (silhouette) on a real reception; 0 disables.
+CLUSTER_MERGE_COSINE = 0.5
 
 # --- Multi-criteria picks per series (use-case 2) ---
 # 'group'    = best group-aware print_score (everyone's eyes open)
