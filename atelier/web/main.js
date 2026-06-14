@@ -4,6 +4,7 @@ import { renderDashboard } from "./dashboard.js";
 import { mountReview, unmountReview } from "./cull.js";
 import { mountPeople } from "./people.js";
 import { mountPrints } from "./prints.js";
+import { mountBuckets, unmountBuckets } from "./buckets.js";
 import { mountRun, unmountRun } from "./run.js";
 import { mountSettings } from "./settings.js";
 
@@ -11,6 +12,7 @@ const MODES = [
   ["review", "Review"],
   ["people", "People"],
   ["prints", "Print list"],
+  ["buckets", "Buckets"],
   ["run", "Run"],
   ["settings", "Settings"],
 ];
@@ -60,10 +62,12 @@ async function showProject(slug, mode) {
   for (const [k] of MODES) document.getElementById(`view-${k}`).classList.toggle("hidden", k !== mode);
   if (mode !== "review") unmountReview();
   if (mode !== "run") unmountRun();
+  if (mode !== "buckets") unmountBuckets();
 
   if (mode === "review") mountReview(slug);
   else if (mode === "people") mountPeople(slug);
   else if (mode === "prints") mountPrints(slug);
+  else if (mode === "buckets") mountBuckets(slug);
   else if (mode === "run") mountRun(slug);
   else if (mode === "settings") mountSettings(slug);
 }

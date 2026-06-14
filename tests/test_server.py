@@ -95,3 +95,25 @@ def test_export_persons_unions_images_and_contains_dest(app, client, tmp_path):
         "/api/p/demo/persons/export", json={"ids": [1], "dest": "/etc/x"}, headers={"X-Atelier-Token": tok}
     )
     assert bad.status_code == 400  # containment still enforced
+
+
+def test_buckets_crud_toggle_and_membership(app, client, tmp_path):
+    pdir = str(tmp_path / "projects")
+    projects.register_existing(pdir, "demo", str(tmp_path))
+    c = db.connect(projects.db_path(pdir, "demo"))
+    for i in (1, 2):
+        c.execute("INSERT INTO images(id, path, processed) VALUES(?,?,1)", (i, f"/p{i}.jpg"))
+    c.commit()
+    c.close()
+    h = {"X-Atelier-Token": _token(client)}
+    bid = client.post("/api/p/demo/buckets", json={"name": "Candids"}, headers=h).get_json()["id"]
+    client.post(f"/api/p/demo/buckets/{bid}/toggle", json={"image_id": 1}, headers=h)
+    on = client.post(f"/api/p/demo/buckets/{bid}/toggle", json={"image_id": 2}, headers=h).get_json()
+    assert on["in"] is True
+    assert client.get("/api/p/demo/buckets").get_json()[0]["count"] == 2
+    mem = client.get("/api/p/demo/buckets/for-images?ids=1,2").get_json()
+    assert set(mem.keys()) == {"1", "2"}
+    client.post(f"/api/p/demo/buckets/{bid}/toggle", json={"image_id": 1}, headers=h)  # toggle off
+    assert client.get("/api/p/demo/buckets").get_json()[0]["count"] == 1
+    client.delete(f"/api/p/demo/buckets/{bid}", headers=h)
+    assert client.get("/api/p/demo/buckets").get_json() == []

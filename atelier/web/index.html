@@ -45,10 +45,11 @@
           <button class="icon-btn" id="rv-next" title="Next burst (→)">›</button>
         </div>
         <div class="stage" id="rv-stage"></div>
+        <div class="bucket-strip" id="rv-buckets"></div>
         <div class="strip" id="rv-strip"></div>
         <div class="help-fab" id="rv-help">
           <span>←→</span> bursts <span>X</span> skip <span>↑↓</span> frames <span>Space</span> print
-          <span>shift+click</span> range <span>1·2·3</span> tag <span>F</span> full <span>↵</span> zoom
+          <span>1–9</span> buckets <span>G/C/A</span> tag <span>F</span> full <span>↵</span> zoom
         </div>
       </section>
 
@@ -68,6 +69,9 @@
         </div>
         <div id="prints-root"></div>
       </section>
+
+      <!-- Buckets -->
+      <section id="view-buckets" class="wrap hidden"><div id="buckets-root"></div></section>
 
       <!-- Run -->
       <section id="view-run" class="wrap run hidden">

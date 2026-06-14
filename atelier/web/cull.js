@@ -1,5 +1,5 @@
-// Review / cull: step through bursts, see the recommended frame, star keepers.
-import { api, post, pct, toast } from "./api.js";
+// Review / cull: step through bursts, see the recommended frame, star keepers, bucket frames.
+import { api, post, pct, escapeHtml, toast } from "./api.js";
 import { openLightbox } from "./faces.js";
 
 const META = {
@@ -18,6 +18,8 @@ let byImg = {}; // image_id -> [{pick_type, source}] for tag chips
 let picks = {}; // pick_type -> {image_id, source}
 let heroId = null;
 let keyHandler = null;
+let buckets = []; // project buckets — the Review strip + number-key shortcuts
+let imgBuckets = {}; // image_id -> Set(bucket_id) for the current burst's frames
 
 export async function mountReview(s) {
   slug = s;
@@ -29,6 +31,7 @@ export async function mountReview(s) {
     if (r.next_offset == null) break;
     off = r.next_offset;
   }
+  buckets = await api(`/api/p/${slug}/buckets`).catch(() => []);
   if (!keyHandler) {
     keyHandler = onKey;
     window.addEventListener("keydown", keyHandler);
@@ -83,6 +86,16 @@ async function load() {
   });
   const featured = (f) => byImg[f.id] || f.is_print;
   displayFrames = [...frames.filter(featured), ...frames.filter((f) => !featured(f))];
+  // which buckets each frame is already in (for the strip highlight + frame dots)
+  imgBuckets = {};
+  const ids = frames.map((f) => f.id).join(",");
+  if (ids && buckets.length) {
+    const mem = await api(`/api/p/${slug}/buckets/for-images?ids=${ids}`).catch(() => ({}));
+    if (slug !== mySlug || pos !== myPos) return;
+    Object.entries(mem).forEach(([iid, arr]) => {
+      imgBuckets[+iid] = new Set(arr);
+    });
+  }
   render();
 }
 
@@ -120,11 +133,17 @@ function render() {
       const chips =
         (byImg[f.id] || []).map((p) => `<span class="ftag crit ${p.source}">${META[p.t].label}</span>`).join("") +
         (f.is_print ? `<span class="ftag print">★ Print</span>` : "");
+      const bdots = [...(imgBuckets[f.id] || [])]
+        .map((bid) => {
+          const b = buckets.find((x) => x.id === bid);
+          return b ? `<span class="bk-dot" style="background:${escapeHtml(b.color || "#cda35c")}"></span>` : "";
+        })
+        .join("");
       const alt = `Frame, print score ${pct(f.print_score)}${f.is_print ? ", in print list" : ""}`;
       return `<div class="frame-thumb ${f.id === heroId ? "cur" : ""} ${f.is_print ? "star" : ""}" data-id="${f.id}"
       role="button" tabindex="0" aria-label="${alt}" aria-pressed="${f.id === heroId}">
       <img loading="lazy" src="/api/p/${slug}/image_thumb/${f.id}" alt="${alt}">
-      <div class="tags">${chips}</div></div>`;
+      <div class="tags">${chips}</div>${bdots ? `<div class="bk-dots">${bdots}</div>` : ""}</div>`;
     })
     .join("");
   document.querySelectorAll("#rv-strip .frame-thumb").forEach((el) => {
@@ -147,6 +166,52 @@ function render() {
       }
     };
   });
+  renderBucketStrip();
+}
+
+function renderBucketStrip() {
+  const el = document.getElementById("rv-buckets");
+  if (!el) return;
+  if (!buckets.length) {
+    el.innerHTML = `<span class="bucket-hint">No buckets yet — create them in the Buckets tab, then press 1–9 here.</span>`;
+    return;
+  }
+  const h = hero();
+  const inSet = (h && imgBuckets[h.id]) || new Set();
+  el.innerHTML = buckets
+    .map(
+      (b, i) =>
+        `<button class="bk-chip ${inSet.has(b.id) ? "on" : ""}" data-id="${b.id}" style="--bc:${escapeHtml(b.color || "#cda35c")}">
+           <span class="k">${i < 9 ? i + 1 : "•"}</span>${escapeHtml(b.name)}</button>`,
+    )
+    .join("");
+  el.querySelectorAll(".bk-chip").forEach((c) => {
+    c.onclick = () => {
+      const b = buckets.find((x) => x.id === +c.dataset.id);
+      const h2 = hero();
+      if (b && h2) toggleBucket(b, h2.id);
+    };
+  });
+}
+
+async function toggleBucket(b, imageId) {
+  try {
+    const r = await post(`/api/p/${slug}/buckets/${b.id}/toggle`, { image_id: imageId });
+    const set = imgBuckets[imageId] || (imgBuckets[imageId] = new Set());
+    if (r.in) set.add(b.id);
+    else set.delete(b.id);
+    b.count += r.in ? 1 : -1;
+    toast(`${r.in ? "Added to" : "Removed from"} ${b.name}`);
+    render();
+  } catch {
+    toast("Could not update bucket", true);
+  }
+}
+
+function toggleBucketForHero(idx) {
+  const b = buckets[idx];
+  const h = hero();
+  if (b && h) toggleBucket(b, h.id);
 }
 
 // Star every frame from the current hero up to (and including) the clicked frame, in filmstrip order.
@@ -265,9 +330,12 @@ function onKey(e) {
   else if (k === " " || k === "Spacebar" || k === "s" || k === "S") {
     e.preventDefault();
     star();
-  } else if (k === "1") setCriterion("group");
-  else if (k === "2") setCriterion("candid");
-  else if (k === "3") setCriterion("aesthetic");
+  } else if (k >= "1" && k <= "9") {
+    e.preventDefault();
+    toggleBucketForHero(+k - 1);
+  } else if (k === "g" || k === "G") setCriterion("group");
+  else if (k === "c" || k === "C") setCriterion("candid");
+  else if (k === "a" || k === "A") setCriterion("aesthetic");
   else if (k === "Enter") {
     const h = hero();
     if (h) openLightbox([{ src: `/api/p/${slug}/image/${h.id}` }]);

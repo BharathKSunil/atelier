@@ -156,6 +156,27 @@ MIGRATIONS = [
            )""",
         ],
     ),
+    # v7 — user-defined buckets: named collections an image can belong to many of
+    # (e.g. "Social media", "Candids", "Private"). Separate from the print list.
+    (
+        7,
+        [
+            """CREATE TABLE IF NOT EXISTS buckets (
+             id INTEGER PRIMARY KEY,
+             name TEXT NOT NULL,
+             color TEXT,
+             sort_order INTEGER DEFAULT 0,
+             created_at REAL
+           )""",
+            """CREATE TABLE IF NOT EXISTS bucket_items (
+             bucket_id INTEGER NOT NULL REFERENCES buckets(id) ON DELETE CASCADE,
+             image_id INTEGER NOT NULL REFERENCES images(id),
+             added_at REAL,
+             PRIMARY KEY (bucket_id, image_id)
+           )""",
+            "CREATE INDEX IF NOT EXISTS idx_bucket_items_image ON bucket_items(image_id)",
+        ],
+    ),
 ]
 
 SCHEMA_VERSION = MIGRATIONS[-1][0] if MIGRATIONS else 0

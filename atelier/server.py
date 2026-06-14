@@ -14,6 +14,7 @@ import os
 import secrets
 import shutil
 import sqlite3
+import time
 from urllib.parse import urlparse
 
 from flask import (
@@ -418,6 +419,149 @@ def create_app(projects_dir):
                 f"""SELECT DISTINCT i.path FROM images i JOIN faces f ON f.image_id=i.id
                     WHERE f.person_id IN ({ph})""",
                 ids,
+            )
+        ]
+        os.makedirs(dest, exist_ok=True)
+        n = 0
+        for p in paths:
+            if os.path.exists(p):
+                try:
+                    shutil.copy2(p, os.path.join(dest, os.path.basename(p)))
+                    n += 1
+                except OSError:
+                    pass
+        return jsonify(ok=True, count=n, total=len(paths), dest=dest)
+
+    # ----- buckets (user-defined collections; an image can be in many) -----
+    _BUCKET_COLORS = ["#c64a5b", "#cda35c", "#5c9ec6", "#6cae72", "#a76cc6", "#c68a5c"]
+
+    @app.get("/api/p/<slug>/buckets")
+    def buckets_list(slug):
+        _require(slug)
+        rows = (
+            _conn(slug)
+            .execute(
+                """SELECT b.id, b.name, b.color, b.sort_order,
+                      (SELECT COUNT(*) FROM bucket_items WHERE bucket_id=b.id) AS count
+               FROM buckets b ORDER BY b.sort_order, b.id"""
+            )
+            .fetchall()
+        )
+        return jsonify([dict(r) for r in rows])
+
+    @app.post("/api/p/<slug>/buckets")
+    def bucket_create(slug):
+        _require(slug)
+        name = ((request.json or {}).get("name") or "").strip()
+        if not name:
+            return jsonify(ok=False, msg="bucket name is required"), 400
+        c = _conn(slug)
+        n = c.execute("SELECT COUNT(*) FROM buckets").fetchone()[0]
+        color = (request.json or {}).get("color") or _BUCKET_COLORS[n % len(_BUCKET_COLORS)]
+        cur = c.execute(
+            "INSERT INTO buckets(name, color, sort_order, created_at) VALUES(?,?,?,?)",
+            (name, color, n, time.time()),
+        )
+        c.commit()
+        return jsonify(ok=True, id=cur.lastrowid, color=color)
+
+    @app.put("/api/p/<slug>/buckets/<int:bid>")
+    def bucket_update(slug, bid):
+        _require(slug)
+        body = request.json or {}
+        c = _conn(slug)
+        if "name" in body:
+            nm = (body.get("name") or "").strip()
+            if not nm:
+                return jsonify(ok=False, msg="name required"), 400
+            c.execute("UPDATE buckets SET name=? WHERE id=?", (nm, bid))
+        if "color" in body:
+            c.execute("UPDATE buckets SET color=? WHERE id=?", (body.get("color"), bid))
+        c.commit()
+        return jsonify(ok=True)
+
+    @app.delete("/api/p/<slug>/buckets/<int:bid>")
+    def bucket_delete(slug, bid):
+        _require(slug)
+        c = _conn(slug)
+        c.execute("DELETE FROM bucket_items WHERE bucket_id=?", (bid,))
+        c.execute("DELETE FROM buckets WHERE id=?", (bid,))
+        c.commit()
+        return jsonify(ok=True)
+
+    @app.post("/api/p/<slug>/buckets/<int:bid>/toggle")
+    def bucket_toggle(slug, bid):
+        _require(slug)
+        iid = (request.json or {}).get("image_id")
+        if iid is None:
+            return jsonify(ok=False, msg="need image_id"), 400
+        c = _conn(slug)
+        exists = c.execute("SELECT 1 FROM bucket_items WHERE bucket_id=? AND image_id=?", (bid, int(iid))).fetchone()
+        if exists:
+            c.execute("DELETE FROM bucket_items WHERE bucket_id=? AND image_id=?", (bid, int(iid)))
+            inb = False
+        else:
+            c.execute(
+                "INSERT OR IGNORE INTO bucket_items(bucket_id, image_id, added_at) VALUES(?,?,?)",
+                (bid, int(iid), time.time()),
+            )
+            inb = True
+        c.commit()
+        return jsonify({"ok": True, "in": inb})
+
+    @app.post("/api/p/<slug>/buckets/<int:bid>/add")
+    def bucket_add_many(slug, bid):
+        _require(slug)
+        ids = [int(x) for x in ((request.json or {}).get("image_ids") or [])]
+        if not ids:
+            return jsonify(ok=False, msg="no images"), 400
+        c = _conn(slug)
+        now = time.time()
+        c.executemany(
+            "INSERT OR IGNORE INTO bucket_items(bucket_id, image_id, added_at) VALUES(?,?,?)",
+            [(bid, i, now) for i in ids],
+        )
+        c.commit()
+        return jsonify(ok=True, added=len(ids))
+
+    @app.get("/api/p/<slug>/buckets/for-images")
+    def buckets_for_images(slug):
+        _require(slug)
+        ids = [int(x) for x in request.args.get("ids", "").split(",") if x.strip().isdigit()]
+        if not ids:
+            return jsonify({})
+        ph = ",".join("?" * len(ids))
+        out = {}
+        for r in _conn(slug).execute(f"SELECT image_id, bucket_id FROM bucket_items WHERE image_id IN ({ph})", ids):
+            out.setdefault(str(r["image_id"]), []).append(r["bucket_id"])
+        return jsonify(out)
+
+    @app.get("/api/p/<slug>/buckets/<int:bid>/images")
+    def bucket_images(slug, bid):
+        _require(slug)
+        c = _conn(slug)
+        offset, limit = _page()
+        total = c.execute("SELECT COUNT(*) FROM bucket_items WHERE bucket_id=?", (bid,)).fetchone()[0]
+        rows = c.execute(
+            """SELECT i.id, i.path, i.print_score FROM bucket_items bi
+               JOIN images i ON i.id=bi.image_id WHERE bi.bucket_id=?
+               ORDER BY bi.added_at DESC, i.id LIMIT ? OFFSET ?""",
+            (bid, limit, offset),
+        ).fetchall()
+        return _paged([dict(r) for r in rows], total, offset, limit)
+
+    @app.post("/api/p/<slug>/buckets/<int:bid>/export")
+    def bucket_export(slug, bid):
+        _require(slug)
+        dest = _safe_dest((request.json or {}).get("dest"))
+        if not dest:
+            return jsonify(ok=False, msg="choose a valid destination folder"), 400
+        c = _conn(slug)
+        paths = [
+            r["path"]
+            for r in c.execute(
+                "SELECT i.path FROM bucket_items bi JOIN images i ON i.id=bi.image_id WHERE bi.bucket_id=?",
+                (bid,),
             )
         ]
         os.makedirs(dest, exist_ok=True)
