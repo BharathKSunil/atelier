@@ -234,6 +234,45 @@ def create_app(projects_dir):
         overrides.reassign_face(_conn(slug), fid, int(pid))
         return jsonify(ok=True)
 
+    @app.post("/api/p/<slug>/faces/reject")
+    def reject_faces(slug):
+        _require(slug)
+        ids = (request.json or {}).get("face_ids") or []
+        n = overrides.reject_faces(_conn(slug), ids)
+        return jsonify(ok=True, removed=n)
+
+    @app.get("/api/p/<slug>/faces/<int:fid>/similar")
+    def similar_faces(slug, fid):
+        _require(slug)
+        try:
+            pid = int(request.args.get("person", -1))
+            thr = float(request.args.get("threshold", 0.5))
+        except ValueError:
+            return jsonify(ok=False, msg="bad params"), 400
+        sims = overrides.similar_faces_in_person(_conn(slug), fid, pid, threshold=thr)
+        return jsonify([{"id": i, "cosine": round(c, 3)} for i, c in sims])
+
+    @app.post("/api/p/<slug>/persons/<int:pid>/export")
+    def export_person(slug, pid):
+        _require(slug)
+        dest = (request.json or {}).get("dest")
+        if not dest:
+            return jsonify(ok=False, msg="choose a destination folder"), 400
+        c = _conn(slug)
+        paths = [r["path"] for r in c.execute(
+            """SELECT DISTINCT i.path FROM images i JOIN faces f ON f.image_id=i.id
+               WHERE f.person_id=?""", (pid,))]
+        os.makedirs(dest, exist_ok=True)
+        n = 0
+        for p in paths:
+            if os.path.exists(p):
+                try:
+                    shutil.copy2(p, os.path.join(dest, os.path.basename(p)))
+                    n += 1
+                except OSError:
+                    pass
+        return jsonify(ok=True, count=n, total=len(paths), dest=os.path.abspath(dest))
+
     # ----- series -----
     @app.get("/api/p/<slug>/series")
     def series_list(slug):

@@ -79,6 +79,43 @@ def split_person(conn, face_ids, name=None):
     return gk
 
 
+REJECT_KEY = "__rejected__"
+
+
+def reject_faces(conn, face_ids):
+    """Mark faces as 'not a person' (misdetection / wrong face): exclude from
+    clustering (person_id=-1). Persists across re-clustering."""
+    face_ids = [int(x) for x in (face_ids or [])]
+    if not face_ids:
+        return 0
+    _write_rows(conn, face_ids, REJECT_KEY, "reject", None)
+    ph = ",".join("?" * len(face_ids))
+    conn.execute(f"UPDATE faces SET person_id=-1, is_best=0 WHERE id IN ({ph})", face_ids)
+    conn.commit()
+    return len(face_ids)
+
+
+def similar_faces_in_person(conn, face_id, person_id, threshold=0.5, limit=60):
+    """Faces in `person_id` whose ArcFace embedding is within `threshold` cosine of
+    `face_id`. For 'remove similar' visual review. Returns [(id, cosine)] desc."""
+    import numpy as np
+    row = conn.execute("SELECT embedding FROM faces WHERE id=?", (face_id,)).fetchone()
+    if not row or not row["embedding"]:
+        return []
+    q = np.frombuffer(row["embedding"], dtype=np.float32)
+    q = q / (np.linalg.norm(q) + 1e-9)
+    out = []
+    for r in conn.execute(
+            "SELECT id, embedding FROM faces WHERE person_id=? AND id!=? AND embedding IS NOT NULL",
+            (person_id, face_id)):
+        e = np.frombuffer(r["embedding"], dtype=np.float32)
+        cos = float(np.dot(q, e / (np.linalg.norm(e) + 1e-9)))
+        if cos >= threshold:
+            out.append((r["id"], cos))
+    out.sort(key=lambda t: -t[1])
+    return out[:limit]
+
+
 def set_group_name(conn, person_id, name):
     """Persist a rename so it survives re-clustering: update the person AND any
     override group(s) covering its faces."""
@@ -102,9 +139,17 @@ def apply_overrides(conn):
     if not groups:
         return
 
+    # rejected faces: force to noise (-1), never allocate a person
+    rej = groups.pop(REJECT_KEY, None)
+    if rej and rej["faces"]:
+        ph = ",".join("?" * len(rej["faces"]))
+        conn.execute(f"UPDATE faces SET person_id=-1 WHERE id IN ({ph})", rej["faces"])
+
     next_id = (conn.execute("SELECT COALESCE(MAX(id), -1) FROM persons").fetchone()[0]) + 1
     used_targets = set()
     for gk, g in groups.items():
+        if g["kind"] == "reject":
+            continue
         fids = g["faces"]
         ph = ",".join("?" * len(fids))
         target = None

@@ -67,7 +67,9 @@ export async function openFaceModal(slug, fid) {
         <div class="face-actions">
           <button class="btn" id="face-open">Open original</button>
           <button class="btn ghost" id="face-reveal">Reveal in Finder</button>
+          ${f.person_id >= 0 ? `<button class="btn danger" id="face-notperson">Not this person</button>` : ""}
         </div>
+        <div id="face-action-zone"></div>
       </div>
     </div>`;
   const closeM = () => document.getElementById("modal-face").classList.add("hidden");
@@ -79,6 +81,61 @@ export async function openFaceModal(slug, fid) {
       const r = await post("/api/fs/reveal", { path: f.path });
       toast(r.ok ? "Revealed in Finder" : "Could not reveal file", !r.ok);
     } catch { toast("Could not reveal file", true); }
+  };
+  const npBtn = box.querySelector("#face-notperson");
+  if (npBtn) npBtn.onclick = () => notThisPerson(slug, f, closeM);
+}
+
+function peopleChanged() { window.dispatchEvent(new CustomEvent("atelier:people-changed")); }
+
+// "Not this person" -> two choices: extract to a new person, or remove (+ similar review).
+function notThisPerson(slug, f, closeM) {
+  const zone = document.getElementById("face-action-zone");
+  zone.innerHTML = `
+    <div class="np-box">
+      <p class="muted">This face isn't this person — what should happen?</p>
+      <button class="btn" id="np-extract">Make a new person from this face</button>
+      <button class="btn danger" id="np-remove">Remove from this person</button>
+    </div>`;
+  zone.querySelector("#np-extract").onclick = async () => {
+    try {
+      await post(`/api/p/${slug}/persons/${f.person_id}/split`, { face_ids: [f.id] });
+      toast("Extracted into a new person"); closeM(); peopleChanged();
+    } catch { toast("Could not extract", true); }
+  };
+  zone.querySelector("#np-remove").onclick = async () => {
+    try {
+      await post(`/api/p/${slug}/faces/reject`, { face_ids: [f.id] });
+    } catch { toast("Could not remove", true); return; }
+    const sims = await api(`/api/p/${slug}/faces/${f.id}/similar?person=${f.person_id}&threshold=0.5`)
+      .catch(() => []);
+    if (!sims || !sims.length) { toast("Removed from person"); closeM(); peopleChanged(); return; }
+    reviewSimilar(slug, sims, closeM);
+  };
+}
+
+// Visual review grid: tick similar faces to also remove. High-similarity pre-checked.
+function reviewSimilar(slug, sims, closeM) {
+  const zone = document.getElementById("face-action-zone");
+  zone.innerHTML = `
+    <div class="np-box">
+      <p><b>${sims.length}</b> similar face${sims.length > 1 ? "s" : ""} in this person — remove these too?</p>
+      <div class="sim-grid">${sims.map((s) =>
+        `<label class="sim-cell"><input type="checkbox" data-id="${s.id}" ${s.cosine >= 0.6 ? "checked" : ""}>
+           <img loading="lazy" src="/api/p/${slug}/thumb/${s.id}" alt="similar face, ${Math.round(s.cosine * 100)}% alike">
+           <span>${Math.round(s.cosine * 100)}%</span></label>`).join("")}</div>
+      <div class="np-actions">
+        <button class="btn ghost" id="sim-skip">Keep them</button>
+        <button class="btn danger" id="sim-remove">Remove selected</button>
+      </div>
+    </div>`;
+  zone.querySelector("#sim-skip").onclick = () => { toast("Removed 1 face"); closeM(); peopleChanged(); };
+  zone.querySelector("#sim-remove").onclick = async () => {
+    const ids = [...zone.querySelectorAll(".sim-cell input:checked")].map((c) => +c.dataset.id);
+    if (ids.length) {
+      try { await post(`/api/p/${slug}/faces/reject`, { face_ids: ids }); } catch { toast("Could not remove", true); }
+    }
+    toast(`Removed ${ids.length + 1} faces`); closeM(); peopleChanged();
   };
 }
 document.getElementById("modal-face").addEventListener("click", (e) => {

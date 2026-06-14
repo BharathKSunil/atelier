@@ -101,10 +101,12 @@ function openPerson(p) {
       <input class="name" id="rename-input" value="${escapeHtml(name)}">
       <button class="btn ghost" id="rename-btn">Save</button>
       <button class="btn ghost" id="merge-btn">Merge into…</button>
+      <button class="btn ghost" id="export-btn">Export photos…</button>
       <button class="btn danger hidden" id="split-btn">Split out (0)</button>
       <span class="muted" style="margin-left:auto">${p.cnt} photos · tick to merge/split · click to inspect</span>
     </div>
     <div class="grid" id="face-grid"></div><div class="sentinel" id="face-sentinel"></div>`;
+  document.getElementById("export-btn").onclick = () => exportPerson(p);
   const back = document.getElementById("back-people");
   back.onclick = () => mountPeople(slug);
   back.onkeydown = (e) => { if (e.key === "Enter" || e.key === " " || e.key === "Spacebar") { e.preventDefault(); mountPeople(slug); } };
@@ -165,6 +167,22 @@ async function splitSelected(person) {
     toast("Split into a new person"); mountPeople(slug);
   } catch { toast("Could not split", true); }
 }
+
+async function exportPerson(p) {
+  let r;
+  try { r = await post("/api/fs/choose", {}); } catch { return; }
+  if (!r || !r.ok || !r.path) return;   // cancelled
+  toast("Copying originals…");
+  try {
+    const res = await post(`/api/p/${slug}/persons/${p.id}/export`, { dest: r.path });
+    toast(res.ok ? `Copied ${res.count} photos → ${res.dest}` : (res.msg || "export failed"), !res.ok);
+  } catch { toast("Export failed", true); }
+}
+
+// faces.js fires this after a reject/extract; refresh the open person in place.
+window.addEventListener("atelier:people-changed", () => {
+  if (currentPerson) openPerson(currentPerson);
+});
 
 async function openMerge(person) {
   document.getElementById("mg-name").textContent = person.display_name || `Person ${person.id}`;

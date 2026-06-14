@@ -13,7 +13,8 @@ let slug = null;
 let series = [];        // [{id, frame_count}]
 let pos = 0;
 let frames = [];        // current burst frames (server order, by print_score)
-let displayFrames = []; // filmstrip order (featured first) — what nav follows
+let displayFrames = []; // filmstrip order (featured first) — frozen per burst in load()
+let byImg = {};         // image_id -> [{pick_type, source}] for tag chips
 let picks = {};         // pick_type -> {image_id, source}
 let heroId = null;
 let keyHandler = null;
@@ -65,6 +66,12 @@ async function load() {
     }),
   ]);
   heroId = (picks.group && picks.group.image_id) || (frames[0] && frames[0].id);
+  // Freeze the filmstrip order ONCE per burst (suggested/starred first). Starring
+  // later must not reorder — that's what was bouncing you back to the start.
+  byImg = {};
+  ORDER.forEach((t) => { const p = picks[t]; if (p) (byImg[p.image_id] = byImg[p.image_id] || []).push({ t, source: p.source }); });
+  const featured = (f) => byImg[f.id] || f.is_print;
+  displayFrames = [...frames.filter(featured), ...frames.filter((f) => !featured(f))];
   render();
 }
 
@@ -93,12 +100,7 @@ function render() {
   starBtn.innerHTML = h && h.is_print ? "★ In print list" : "☆ Add to print list";
   starBtn.classList.toggle("accent", !!(h && h.is_print));
 
-  // filmstrip — criteria + print tags on each frame; suggested/picked/starred sort first
-  const byImg = {};
-  ORDER.forEach((t) => { const p = picks[t]; if (p) (byImg[p.image_id] = byImg[p.image_id] || []).push({ t, source: p.source }); });
-  const featured = (f) => byImg[f.id] || f.is_print;
-  displayFrames = [...frames.filter(featured), ...frames.filter((f) => !featured(f))];
-
+  // filmstrip — order is frozen in load(); render only refreshes tags/highlight in place
   document.getElementById("rv-strip").innerHTML = displayFrames.map((f) => {
     const chips = (byImg[f.id] || [])
       .map((p) => `<span class="ftag crit ${p.source}">${META[p.t].label}</span>`).join("")
