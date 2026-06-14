@@ -3,7 +3,7 @@ import tempfile
 
 from PIL import Image
 
-from facelib import imaging
+from atelier import imaging
 
 
 def test_png_falls_back_to_mtime():

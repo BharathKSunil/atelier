@@ -1,6 +1,6 @@
 import numpy as np
 
-from facelib import quality
+from atelier import quality
 
 
 def test_laplacian_flat_is_zero():

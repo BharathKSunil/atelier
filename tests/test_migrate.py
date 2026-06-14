@@ -1,6 +1,6 @@
 import os
 
-from facelib import config, db, migrate, projects
+from atelier import config, db, migrate, projects
 
 
 def test_default_projects_dir_env_override(monkeypatch, tmp_path):

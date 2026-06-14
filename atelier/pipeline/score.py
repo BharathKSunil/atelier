@@ -15,7 +15,7 @@ import numpy as np
 from PIL import Image
 from tqdm import tqdm
 
-from facelib import db, landmarks, quality
+from atelier import db, landmarks, quality
 
 # MediaPipe face-mesh landmark indices (same topology in the Tasks API)
 L_EYE = [33, 160, 158, 133, 153, 144]    # p1..p6 for EAR

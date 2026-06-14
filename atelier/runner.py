@@ -13,11 +13,13 @@ from .logsetup import get_logger
 
 _log_mod = get_logger("atelier.runner")
 
+# phases run as `python -m atelier.pipeline.<name>` subprocesses (isolation: a phase
+# crash never kills the server; models reload per run).
 PHASES = [
-    ("index",   "01_index.py", lambda folder, dbp: ["--photos", folder, "--db", dbp]),
-    ("cluster", "02_cluster_persons.py", lambda folder, dbp: ["--db", dbp]),
-    ("series",  "02b_group_series.py", lambda folder, dbp: ["--db", dbp]),
-    ("score",   "03_score.py", lambda folder, dbp: ["--db", dbp]),
+    ("index",   "atelier.pipeline.index", lambda folder, dbp: ["--photos", folder, "--db", dbp]),
+    ("cluster", "atelier.pipeline.cluster", lambda folder, dbp: ["--db", dbp]),
+    ("series",  "atelier.pipeline.series", lambda folder, dbp: ["--db", dbp]),
+    ("score",   "atelier.pipeline.score", lambda folder, dbp: ["--db", dbp]),
 ]
 PHASE_NAMES = [p[0] for p in PHASES]
 PROJECT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -78,12 +80,12 @@ class Runner:
             except OSError:
                 pass
         try:
-            for name, script, build_args in self._phases:
+            for name, module, build_args in self._phases:
                 self.state["phase"] = name
                 self._log(f"=== phase: {name} ===")
                 _log_mod.info("phase %s started", name)
                 t0 = time.monotonic()
-                cmd = [sys.executable, script, *build_args(folder, self.db_path),
+                cmd = [sys.executable, "-m", module, *build_args(folder, self.db_path),
                        *self._flags.get(name, [])]
                 proc = subprocess.Popen(
                     cmd, cwd=PROJECT_DIR, text=True, bufsize=1,

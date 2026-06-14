@@ -12,7 +12,7 @@ import random
 
 from PIL import Image, ImageDraw
 
-from facelib import db, projects
+from atelier import db, projects
 
 random.seed(7)
 

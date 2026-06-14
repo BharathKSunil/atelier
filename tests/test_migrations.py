@@ -1,6 +1,6 @@
 import sqlite3
 
-from facelib import db
+from atelier import db
 
 
 def test_fresh_db_at_latest_version(tmp_path):

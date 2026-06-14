@@ -2,7 +2,7 @@
 
 Layout under <projects_dir>/:
   registry.json        list of {slug, name, source_folder, created_at}
-  <slug>.db            per-project database (facelib.db schema)
+  <slug>.db            per-project database (atelier.db schema)
   <slug>.log           per-project run log
 """
 import json

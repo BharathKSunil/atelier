@@ -2,7 +2,7 @@ import os
 
 import pytest
 
-from facelib import projects
+from atelier import projects
 
 
 def test_slugify_basic_and_unique():

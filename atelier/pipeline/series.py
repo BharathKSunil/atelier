@@ -9,7 +9,7 @@ from collections import defaultdict
 
 import numpy as np
 
-from facelib import config, db, series
+from atelier import config, db, series
 
 
 def main():

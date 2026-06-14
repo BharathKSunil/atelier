@@ -34,12 +34,12 @@ test: ## Run pure-logic unit tests (no models needed)
 
 .PHONY: check
 check: ## Byte-compile every script (fast syntax check)
-	$(PYTHON) -m py_compile *.py facelib/*.py && echo "✓ all compile"
+	$(PYTHON) -m py_compile atelier/*.py atelier/pipeline/*.py && echo "✓ all compile"
 
 # ---------------------------------------------------------------- database
 .PHONY: db
 db: ## Create an empty database (DB=faces.db)
-	@$(PYTHON) -c "from facelib import db; db.init_db('$(DB)'); print('✓ created $(DB)')"
+	@$(PYTHON) -c "from atelier import db; db.init_db('$(DB)'); print('✓ created $(DB)')"
 
 .PHONY: db-reset
 db-reset: ## Delete and recreate the database (DB=faces.db)
@@ -48,7 +48,7 @@ db-reset: ## Delete and recreate the database (DB=faces.db)
 
 .PHONY: stats
 stats: ## Print row counts in the database (DB=faces.db)
-	@$(PYTHON) -c "from facelib import db; c=db.connect('$(DB)'); \
+	@$(PYTHON) -c "from atelier import db; c=db.connect('$(DB)'); \
 	q=lambda t: c.execute('SELECT COUNT(*) n FROM '+t).fetchone()['n']; \
 	print(f\"images={q('images')} faces={q('faces')} persons={q('persons')} series={q('series')}\")"
 
@@ -56,25 +56,25 @@ stats: ## Print row counts in the database (DB=faces.db)
 .PHONY: index
 index: ## Phase 1 — index photos (requires PHOTOS=/path, resumable)
 	@test -n "$(PHOTOS)" || { echo "ERROR: set PHOTOS=/path/to/photos"; exit 1; }
-	$(PYTHON) 01_index.py --photos "$(PHOTOS)" --db $(DB)
+	$(PYTHON) -m atelier.pipeline.index --photos "$(PHOTOS)" --db $(DB)
 
 .PHONY: reindex
 reindex: ## Phase 1 — retry images that errored last run (PHOTOS=/path)
 	@test -n "$(PHOTOS)" || { echo "ERROR: set PHOTOS=/path/to/photos"; exit 1; }
-	$(PYTHON) 01_index.py --photos "$(PHOTOS)" --db $(DB) --retry-errors
+	$(PYTHON) -m atelier.pipeline.index --photos "$(PHOTOS)" --db $(DB) --retry-errors
 
 MIN_CLUSTER ?=
 .PHONY: cluster
 cluster: ## Phase 2 — cluster faces into persons (MIN_CLUSTER=N to override)
-	$(PYTHON) 02_cluster_persons.py --db $(DB) $(if $(MIN_CLUSTER),--min-cluster-size $(MIN_CLUSTER),)
+	$(PYTHON) -m atelier.pipeline.cluster --db $(DB) $(if $(MIN_CLUSTER),--min-cluster-size $(MIN_CLUSTER),)
 
 .PHONY: series
 series: ## Phase 2b — group images into series/bursts
-	$(PYTHON) 02b_group_series.py --db $(DB)
+	$(PYTHON) -m atelier.pipeline.series --db $(DB)
 
 .PHONY: score
 score: ## Phase 3 — score quality, pick best face + best print frame
-	$(PYTHON) 03_score.py --db $(DB)
+	$(PYTHON) -m atelier.pipeline.score --db $(DB)
 
 .PHONY: pipeline
 pipeline: index cluster series score ## Run all 4 phases (requires PHOTOS=/path)
@@ -86,7 +86,7 @@ start: ## Start web server in background (PROJECTS_DIR=, PORT=)
 	@if [ -f $(PIDFILE) ] && kill -0 $$(cat $(PIDFILE)) 2>/dev/null; then \
 		echo "already running (pid $$(cat $(PIDFILE))) on http://localhost:$(PORT)"; \
 	else \
-		$(PYTHON) 04_server.py --projects-dir $(PROJECTS_DIR) --port $(PORT) > $(LOGFILE) 2>&1 & echo $$! > $(PIDFILE); \
+		$(PYTHON) -m atelier.server --projects-dir $(PROJECTS_DIR) --port $(PORT) > $(LOGFILE) 2>&1 & echo $$! > $(PIDFILE); \
 		sleep 1; echo "✓ started pid $$(cat $(PIDFILE)) -> http://localhost:$(PORT)  (logs: make logs)"; \
 	fi
 
@@ -105,7 +105,7 @@ restart: stop start ## Restart the web server
 
 .PHONY: serve
 serve: ## Run web server in the foreground (Ctrl-C to quit)
-	$(PYTHON) 04_server.py --projects-dir $(PROJECTS_DIR) --port $(PORT)
+	$(PYTHON) -m atelier.server --projects-dir $(PROJECTS_DIR) --port $(PORT)
 
 .PHONY: status
 status: ## Show whether the server is running
@@ -124,18 +124,18 @@ open: ## Open the web UI in the browser
 # ---------------------------------------------------------------- demo
 .PHONY: seed
 seed: ## Build the synthetic demo database (demo.db + demo_photos/)
-	$(PYTHON) demo_seed.py --db demo.db --photos $(PHOTOS_DIR)
+	$(PYTHON) -m atelier.demo_seed --db demo.db --photos $(PHOTOS_DIR)
 
 .PHONY: demo
 demo: ## Seed a demo project and open the dashboard
-	$(PYTHON) demo_seed.py --projects-dir $(PROJECTS_DIR) --name "Demo" --photos $(PHOTOS_DIR)
+	$(PYTHON) -m atelier.demo_seed --projects-dir $(PROJECTS_DIR) --name "Demo" --photos $(PHOTOS_DIR)
 	@$(MAKE) -s start
 	@$(MAKE) -s open
 
 # ---------------------------------------------------------------- cleanup
 .PHONY: clean
 clean: ## Remove caches, pidfile, server log
-	@rm -rf __pycache__ facelib/__pycache__ tests/__pycache__ .pytest_cache $(PIDFILE) $(LOGFILE)
+	@rm -rf atelier/__pycache__ atelier/**/__pycache__ tests/__pycache__ .pytest_cache $(PIDFILE) $(LOGFILE)
 	@echo "✓ cleaned"
 
 .PHONY: clean-all

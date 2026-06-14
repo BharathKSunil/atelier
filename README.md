@@ -8,13 +8,24 @@ Two use-cases:
 
 ## Pipeline
 
-| Phase | Script | Does | Time (20k imgs, M1 Max) |
-|---|---|---|---|
-| 1 Index | `01_index.py` | MTCNN faces → 512-d identity embed + DINOv2 384-d scene embed; full-res sharpness/exposure | ~2–4 h (I/O bound), resumable |
-| 2 Persons | `02_cluster_persons.py` | HDBSCAN over face embeddings → `person_id` | minutes |
-| 2b Series | `02b_group_series.py` | EXIF time + scene embedding → `series_id` (bursts) | minutes |
-| 3 Score | `03_score.py` | MediaPipe landmarks → eyes/smile/frontality; best face per person + best frame per series | ~30–60 min |
-| 4 Browse | `04_server.py` | Flask + web UI at localhost:5050 | instant |
+| Phase | Module | Does |
+|---|---|---|
+| 1 Index | `atelier.pipeline.index` | insightface RetinaFace detect + ArcFace 512-d embed (quality-gated, EXIF-upright) + DINOv2 384-d scene embed; full-res sharpness/exposure. Resumable. |
+| 2 Persons | `atelier.pipeline.cluster` | HDBSCAN over ArcFace embeddings (+ centroid-merge) → `person_id` |
+| 2b Series | `atelier.pipeline.series` | EXIF time + scene embedding → `series_id` (bursts) |
+| 3 Score | `atelier.pipeline.score` | MediaPipe landmarks → eyes/smile/frontality; best face per person + best frame per series |
+| 4 Browse | `atelier.server` | Flask + web UI at localhost:5050 |
+
+## Project layout
+
+```
+atelier/                package
+  config db models imaging quality series overrides projects settings
+  runner logsetup errors migrate recognition landmarks fsdialog
+  pipeline/ index.py cluster.py series.py score.py
+  server.py  cli.py  demo_seed.py  web/
+tests/   pyproject.toml  Makefile  mise.toml
+```
 
 ## Quickstart (make)
 
@@ -49,19 +60,21 @@ python -c "import torch; print('MPS:', torch.backends.mps.is_available())"   # w
 ```
 
 > Apple Silicon: if a model hits an unsupported MPS op, run with
-> `PYTORCH_ENABLE_MPS_FALLBACK=1 python 01_index.py ...` to fall back to CPU for that op.
+> `PYTORCH_ENABLE_MPS_FALLBACK=1` to fall back to CPU for that op (set in `mise.toml`).
 
-## Run
+## Run (CLI)
+
+After `pip install -e .`, the `atelier` command (and `atelier-server`, `atelier-index`, …) are available; or use `python -m atelier <cmd>`:
 
 ```bash
-python 01_index.py --photos /path/to/photos --db faces.db   # resumable — safe to Ctrl-C and rerun
-python 02_cluster_persons.py --db faces.db
-python 02b_group_series.py --db faces.db
-python 03_score.py --db faces.db
-python 04_server.py --db faces.db --port 5050               # open http://localhost:5050
+atelier index   --photos /path/to/photos --db faces.db   # resumable
+atelier cluster --db faces.db
+atelier series  --db faces.db
+atelier score   --db faces.db
+atelier serve   --port 5050                              # http://localhost:5050 (~/.atelier projects)
 ```
 
-Tunables (cluster sizes, series thresholds, print weights) live in `facelib/config.py`.
+Tunables (cluster sizes, series thresholds, print weights, recognition backend) live in `atelier/config.py`.
 Re-cluster persons or regroup series anytime by re-running phase 2 / 2b — the index (phase 1) is untouched.
 
 ## Web UI
@@ -77,7 +90,7 @@ Re-cluster persons or regroup series anytime by re-running phase 2 / 2b — the 
 - **Persisted image thumbnails** (`images.thumbnail`) — the browse path never re-decodes a 20 MB original.
 - **Non-destructive pipeline:** re-runs preserve renames (carried by face-membership overlap) and manual merges/splits/picks. Schema evolves via `PRAGMA user_version` migrations applied on connect.
 - **Monotone sharpness** (`1-exp(-var/k)`) replaces the cap that saturated every in-focus photo to 1.0.
-- **Over-split levers** (off by default; tune in `facelib/config.py`): `HDBSCAN_SELECTION_EPSILON`, `CLUSTER_MERGE_COSINE` (centroid-cosine merge post-pass). `make cluster MIN_CLUSTER=…` to sweep.
+- **Over-split levers** (off by default; tune in `atelier/config.py`): `HDBSCAN_SELECTION_EPSILON`, `CLUSTER_MERGE_COSINE` (centroid-cosine merge post-pass). `make cluster MIN_CLUSTER=…` to sweep.
 
 ### Face engine (detection + recognition)
 
@@ -85,7 +98,7 @@ Default backend is **insightface** — RetinaFace detection + ArcFace embeddings
 - **False positives** (jewelry, hands, hair, skin tagged as people) — rejected by the detector confidence gate `FACE_DET_THRESHOLD` (0.60).
 - **Junk/duplicate clusters** — ArcFace separates identities far better (same-person cosine ~0.98 vs different ~0.15; FaceNet gave ~0.51), so HDBSCAN over-splits and false-merges much less.
 
-Index-time gates in `facelib/config.py`: `FACE_DET_THRESHOLD`, `FACE_MIN_PX`, `FACE_MIN_SHARPNESS`. Set `FACE_BACKEND="mtcnn"` to fall back.
+Index-time gates in `atelier/config.py`: `FACE_DET_THRESHOLD`, `FACE_MIN_PX`, `FACE_MIN_SHARPNESS`. Set `FACE_BACKEND="mtcnn"` to fall back.
 
 > **Switching backend requires a full re-index** — embeddings live in a different space:
 > ```bash
@@ -125,10 +138,10 @@ ruff check . && pytest -q  # lint + tests (also run in CI: .github/workflows/ci.
 
 ## Architecture notes
 
-- `facelib/` holds all logic. Heavy imports (torch, facenet, mediapipe) are **lazy** — pure modules (`quality`, `series`, `db`, `imaging`) import with numpy/Pillow only, so the math is unit-testable without GBs of deps.
+- `atelier/` holds all logic. Heavy imports (torch, facenet, mediapipe) are **lazy** — pure modules (`quality`, `series`, `db`, `imaging`) import with numpy/Pillow only, so the math is unit-testable without GBs of deps.
 - **I/O bound, not GPU bound:** reading ~400 GB once dominates. External drives are the real bottleneck.
 - **Sharpness measured on full-res** (Phase 1, while the file is open) — downscaled sharpness is unreliable for detecting motion blur.
-- **Print score is group-aware:** `min(eye_open)` over all faces, so one person blinking sinks a group shot. Formula + weights in `facelib/config.py` and `facelib/quality.py`.
+- **Print score is group-aware:** `min(eye_open)` over all faces, so one person blinking sinks a group shot. Formula + weights in `atelier/config.py` and `atelier/quality.py`.
 - File formats: **JPEG + PNG** (Pillow native). PNG has no EXIF time → falls back to file mtime and series-grouping relies on the scene embedding for those.
 
 ## Tests

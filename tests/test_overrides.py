@@ -1,4 +1,4 @@
-from facelib import db, overrides
+from atelier import db, overrides
 
 
 def _seed(path):

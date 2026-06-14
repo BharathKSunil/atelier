@@ -14,7 +14,7 @@ import os
 
 from tqdm import tqdm
 
-from facelib import config, db, imaging, models, quality
+from atelier import config, db, imaging, models, quality
 
 
 def _crop_full(full_img, box, scale):

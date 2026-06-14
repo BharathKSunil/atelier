@@ -1,6 +1,6 @@
 import numpy as np
 
-from facelib import series
+from atelier import series
 
 
 def _n(v):

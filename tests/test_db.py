@@ -1,7 +1,7 @@
 import os
 import tempfile
 
-from facelib import db
+from atelier import db
 
 
 def test_init_creates_tables():

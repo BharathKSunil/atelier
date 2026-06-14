@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Phase 4 — Browse. Project-centric Flask REST API + static SPA.
 
-Each project owns its own SQLite DB (see facelib.projects). The dashboard
+Each project owns its own SQLite DB (see atelier.projects). The dashboard
 creates projects, a native macOS dialog picks the source folder, the pipeline
 runs in the background with a live console, and People/Series/Faces are browsed
 per project.
@@ -15,8 +15,8 @@ import sqlite3
 from flask import Flask, abort, jsonify, request, send_file, send_from_directory
 from werkzeug.exceptions import HTTPException
 
-from facelib import config, db, fsdialog, migrate, overrides, projects, settings
-from facelib.runner import get_runner
+from atelier import config, db, fsdialog, migrate, overrides, projects, settings
+from atelier.runner import get_runner
 
 WEB_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web")
 

@@ -11,20 +11,20 @@ run = "pytest -q"
 
 [tasks.index]
 description = "Phase 1 — index photos (resumable)"
-run = "python 01_index.py --photos {{arg(name='photos')}} --db faces.db"
+run = "python -m atelier.pipeline.index --photos {{arg(name='photos')}} --db faces.db"
 
 [tasks.cluster]
 description = "Phase 2 — cluster faces into persons"
-run = "python 02_cluster_persons.py --db faces.db"
+run = "python -m atelier.pipeline.cluster --db faces.db"
 
 [tasks.series]
 description = "Phase 2b — group images into series/bursts"
-run = "python 02b_group_series.py --db faces.db"
+run = "python -m atelier.pipeline.series --db faces.db"
 
 [tasks.score]
 description = "Phase 3 — score quality, pick best face + best print frame"
-run = "python 03_score.py --db faces.db"
+run = "python -m atelier.pipeline.score --db faces.db"
 
 [tasks.serve]
 description = "Phase 4 — web UI at localhost:5000"
-run = "python 04_server.py --db faces.db --port 5000"
+run = "python -m atelier.server --db faces.db --port 5000"

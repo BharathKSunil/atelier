@@ -29,7 +29,7 @@ INSIGHTFACE_DET_SIZE = 640   # SCRFD standard; larger can MISS frame-filling fac
 # this only swaps what produces the 512-d embedding from the aligned 112x112 crop.
 # "arcface"  = insightface buffalo_l ArcFace embedding (default, unchanged behavior).
 # "adaface"  = mk-minchul AdaFace IR-101 / WebFace12M (quality-adaptive; better on
-#              low-quality / varied-pose wedding faces). See facelib/recognition.py.
+#              low-quality / varied-pose wedding faces). See atelier/recognition.py.
 RECOGNITION_MODEL = "arcface"   # or "adaface"
 
 # Quality gates applied at index time (reject non-faces before they ever cluster):

@@ -4,7 +4,7 @@
 L2-normalize 512-d face embeddings, then HDBSCAN. Non-destructive:
   - display_name / notes are carried forward by face-membership overlap (Jaccard),
     so renames survive re-clustering.
-  - manual merge/split/reassign overrides (facelib.overrides) are re-applied after.
+  - manual merge/split/reassign overrides (atelier.overrides) are re-applied after.
 person_id == -1 means noise (browsable but ungrouped).
 """
 import argparse
@@ -13,8 +13,8 @@ from collections import defaultdict
 
 import numpy as np
 
-from facelib import config, db, overrides
-from facelib.errors import DatabaseError
+from atelier import config, db, overrides
+from atelier.errors import DatabaseError
 
 
 def main():
