@@ -8,17 +8,25 @@ per project.
 """
 import argparse
 import io
+import json
 import os
+import secrets
 import shutil
 import sqlite3
+from urllib.parse import urlparse
 
-from flask import Flask, abort, jsonify, request, send_file, send_from_directory
+from flask import Flask, Response, abort, jsonify, request, send_file, send_from_directory
 from werkzeug.exceptions import HTTPException
 
 from atelier import config, db, fsdialog, migrate, overrides, projects, settings
 from atelier.runner import get_runner
 
 WEB_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web")
+
+# Loopback hostnames the server will answer to. The app is unauthenticated by
+# design (single local user); these checks keep a stray LAN bind or a drive-by
+# cross-origin page from reaching the API.
+LOCAL_HOSTS = {"127.0.0.1", "localhost", "::1", ""}
 
 
 def create_app(projects_dir):
@@ -30,7 +38,47 @@ def create_app(projects_dir):
         if n:
             print(f"migrated {n} project(s) from ./projects -> {projects_dir}")
 
+    # Per-process CSRF token. Injected into index.html and required on every
+    # state-changing request; a cross-origin page can POST but cannot read it.
+    app_token = secrets.token_urlsafe(32)
+
+    @app.before_request
+    def _guard():
+        host = (request.host or "").rsplit(":", 1)[0].strip("[]")
+        if host not in LOCAL_HOSTS:
+            abort(403, description="non-local host")
+        origin = request.headers.get("Origin")
+        if origin and (urlparse(origin).hostname or "") not in LOCAL_HOSTS:
+            abort(403, description="cross-origin request blocked")
+        if request.method in ("POST", "PUT", "DELETE", "PATCH"):
+            tok = request.headers.get("X-Atelier-Token", "")
+            if not secrets.compare_digest(tok, app_token):
+                abort(403, description="missing or invalid request token")
+
     # ----- helpers -----
+    def _allowed_roots():
+        roots = []
+        for r in (os.path.expanduser("~"), projects_dir,
+                  "/Volumes", "/tmp", "/private/tmp", "/mnt", "/media"):
+            try:
+                rp = os.path.realpath(r)
+            except OSError:
+                continue
+            if os.path.isdir(rp):
+                roots.append(rp)
+        return roots
+
+    def _safe_dest(dest):
+        """Resolve an export destination and confine it to a sane root (home,
+        the projects dir, mounted volumes, tmp). Returns the real path or None."""
+        if not dest:
+            return None
+        real = os.path.realpath(os.path.expanduser(str(dest)))
+        for root in _allowed_roots():
+            if real == root or real.startswith(root + os.sep):
+                return real
+        return None
+
     def _require(slug):
         proj = projects.get_project(projects_dir, slug)
         if not proj:
@@ -62,7 +110,11 @@ def create_app(projects_dir):
     # ----- static -----
     @app.get("/")
     def index():
-        return send_from_directory(WEB_DIR, "index.html")
+        with open(os.path.join(WEB_DIR, "index.html"), encoding="utf-8") as f:
+            html = f.read()
+        tag = f"<script>window.ATELIER_TOKEN={json.dumps(app_token)};</script>"
+        html = html.replace("</head>", tag + "</head>", 1)
+        return Response(html, mimetype="text/html")
 
     @app.get("/static/<path:fname>")
     def static_files(fname):
@@ -255,9 +307,9 @@ def create_app(projects_dir):
     @app.post("/api/p/<slug>/persons/<int:pid>/export")
     def export_person(slug, pid):
         _require(slug)
-        dest = (request.json or {}).get("dest")
+        dest = _safe_dest((request.json or {}).get("dest"))
         if not dest:
-            return jsonify(ok=False, msg="choose a destination folder"), 400
+            return jsonify(ok=False, msg="choose a valid destination folder"), 400
         c = _conn(slug)
         paths = [r["path"] for r in c.execute(
             """SELECT DISTINCT i.path FROM images i JOIN faces f ON f.image_id=i.id
@@ -271,7 +323,7 @@ def create_app(projects_dir):
                     n += 1
                 except OSError:
                     pass
-        return jsonify(ok=True, count=n, total=len(paths), dest=os.path.abspath(dest))
+        return jsonify(ok=True, count=n, total=len(paths), dest=dest)
 
     # ----- series -----
     @app.get("/api/p/<slug>/series")
@@ -388,7 +440,9 @@ def create_app(projects_dir):
     @app.post("/api/p/<slug>/prints/export")
     def export_prints(slug):
         _require(slug)
-        dest = (request.json or {}).get("dest", f"./print_exports/{slug}")
+        dest = _safe_dest((request.json or {}).get("dest") or f"./print_exports/{slug}")
+        if not dest:
+            return jsonify(ok=False, msg="choose a valid destination folder"), 400
         rows = _conn(slug).execute(
             "SELECT i.path FROM picks p JOIN images i ON i.id=p.image_id WHERE p.pick_type='print'"
         ).fetchall()
@@ -398,7 +452,7 @@ def create_app(projects_dir):
             if os.path.exists(r["path"]):
                 shutil.copy2(r["path"], os.path.join(dest, os.path.basename(r["path"])))
                 n += 1
-        return jsonify(ok=True, count=n, dest=os.path.abspath(dest))
+        return jsonify(ok=True, count=n, dest=dest)
 
     # ----- face detail -----
     @app.get("/api/p/<slug>/face/<int:fid>")
@@ -460,14 +514,16 @@ def create_app(projects_dir):
     @app.post("/api/p/<slug>/export/<int:iid>")
     def export(slug, iid):
         _require(slug)
-        dest = (request.json or {}).get("dest", "./print_exports")
+        dest = _safe_dest((request.json or {}).get("dest") or "./print_exports")
+        if not dest:
+            return jsonify(ok=False, msg="choose a valid destination folder"), 400
         r = _conn(slug).execute("SELECT path FROM images WHERE id=?", (iid,)).fetchone()
         if not r or not os.path.exists(r["path"]):
             abort(404)
         os.makedirs(dest, exist_ok=True)
         out = os.path.join(dest, os.path.basename(r["path"]))
         shutil.copy2(r["path"], out)
-        return jsonify(ok=True, path=os.path.abspath(out))
+        return jsonify(ok=True, path=out)
 
     # ----- JSON error handling (no raw HTML 500s) -----
     @app.errorhandler(sqlite3.Error)
@@ -490,7 +546,8 @@ def main():
     args = ap.parse_args()
     args.projects_dir = args.projects_dir or config.default_projects_dir()
     print(f"http://localhost:{args.port}  (projects: {os.path.abspath(args.projects_dir)})")
-    create_app(args.projects_dir).run(port=args.port, debug=False, threaded=True)
+    # Loopback only and unauthenticated by design — never expose beyond 127.0.0.1.
+    create_app(args.projects_dir).run(host="127.0.0.1", port=args.port, debug=False, threaded=True)
 
 
 if __name__ == "__main__":

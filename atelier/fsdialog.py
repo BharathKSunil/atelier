@@ -9,7 +9,9 @@ def choose_folder(default=None):
     Returns the absolute POSIX path, or None if cancelled / unavailable.
     """
     prompt = 'choose folder with prompt "Select photo folder"'
-    if default and os.path.isdir(default):
+    # Never interpolate a path that could break out of the AppleScript string literal
+    # into `do shell script ...`. Real folder paths never contain these characters.
+    if default and os.path.isdir(default) and not any(c in default for c in '"\\\n\r'):
         prompt += f' default location POSIX file "{default}"'
     try:
         out = subprocess.run(

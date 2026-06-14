@@ -1,4 +1,6 @@
 const DEFAULT_TIMEOUT = 15000;
+// CSRF token injected into index.html by the server; required on mutating requests.
+const TOKEN = (typeof window !== "undefined" && window.ATELIER_TOKEN) || "";
 
 export async function api(p, o) {
   o = o || {};
@@ -7,7 +9,7 @@ export async function api(p, o) {
   const tid = setTimeout(() => ctrl.abort(), ms);
   let res;
   try {
-    res = await fetch(p, { ...o, signal: ctrl.signal });
+    res = await fetch(p, { ...o, headers: { ...(o.headers || {}), "X-Atelier-Token": TOKEN }, signal: ctrl.signal });
   } catch (e) {
     clearTimeout(tid);
     if (e && e.name === "AbortError") throw new Error(`Request timed out: ${p}`);
