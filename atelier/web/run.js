@@ -1,4 +1,5 @@
-// Live run console: phase steps, progress, streaming log (SSE), stop, live faces.
+// Live run console: per-stage cards (the primary realtime view), live face grid,
+// stop/re-run, and collapsible logs (SSE stream, persisted across reloads).
 import { api, post, toast } from "./api.js";
 
 let timer = null; // status poll
@@ -163,44 +164,79 @@ function fmtDur(sec) {
   return m ? `${m}m ${r}s` : `${r}s`;
 }
 
+const STAGE_LABEL = { index: "Index photos", cluster: "Group people", series: "Find bursts", score: "Score & pick" };
+const STAGE_DESC = {
+  index: "detect + embed faces",
+  cluster: "cluster faces into people",
+  series: "group bursts of the same moment",
+  score: "pick the best face + frame",
+};
+
 function render(s) {
   const phases = s.all_phases || ["index", "cluster", "series", "score"];
   const done = new Set(s.phases_done || []);
   const timings = s.phase_timings || {};
-  document.getElementById("run-source").textContent = s.folder ? `Source: ${s.folder}` : "";
-  document.getElementById("phase-steps").innerHTML = phases
-    .map((p) => {
-      const cls = done.has(p) ? "done" : s.phase === p ? "active" : "";
-      const mk = done.has(p) ? "✓" : s.phase === p ? "●" : "○";
-      const dur = timings[p] != null ? ` <span class="step-dur">${timings[p]}s</span>` : "";
-      return `<div class="step ${cls}"><span>${mk}</span>${p}${dur}</div>`;
-    })
-    .join('<span class="step-sep">·</span>');
+  const failed = !s.running && !!s.error && !String(s.error).includes("stopped");
+  const stopped = !s.running && !!s.error && String(s.error).includes("stopped");
 
-  let w = 0;
-  if (s.phase === "index" && s.index_total) w = (s.index_done / s.index_total) * 100;
-  else if (!s.running && done.size === phases.length) w = 100;
-  else if (s.running) w = 100;
-  const fill = document.getElementById("run-bar-fill");
-  fill.style.width = Math.round(w) + "%";
-  fill.classList.toggle("indeterminate", s.running && s.phase !== "index");
-
-  const statusTxt = s.running
-    ? `Running: ${s.phase || "…"}`
-    : s.error
-      ? String(s.error).includes("stopped")
+  document.getElementById("run-title").textContent = s.running
+    ? "Running…"
+    : failed
+      ? "Failed"
+      : stopped
         ? "Stopped"
-        : "Failed"
-      : done.size
-        ? "Complete ✓"
-        : "Idle";
-  const parts = [];
-  if (s.index_total) parts.push(`${s.index_done}/${s.index_total} images`);
-  if (s.faces_found != null) parts.push(`${s.faces_found} faces`);
-  if (s.errors) parts.push(`${s.errors} errors`);
-  if (s.started_at) parts.push(fmtDur((s.finished_at || Date.now() / 1000) - s.started_at));
-  document.getElementById("run-counts").textContent = `${statusTxt}   ${parts.join(" · ")}`;
+        : done.size
+          ? "Complete"
+          : "Run";
+  document.getElementById("run-source").textContent = s.folder ? `Source: ${s.folder}` : "";
 
+  // ---- stage cards: the primary realtime view (logs are secondary) ----
+  let reachedCurrent = false;
+  document.getElementById("run-stages").innerHTML = phases
+    .map((p) => {
+      let st;
+      if (done.has(p)) st = "done";
+      else if (s.phase === p) {
+        st = s.error ? "failed" : "running";
+        reachedCurrent = true;
+      } else if (s.running && !reachedCurrent) st = "queued";
+      else st = s.error ? "skipped" : s.running ? "queued" : done.size ? "skipped" : "queued";
+      const icon = { done: "✓", running: "●", failed: "!", queued: "○", skipped: "–" }[st];
+
+      let detail = "";
+      if (p === "index" && (st === "running" || st === "done") && s.index_total) {
+        const w = Math.round(((s.index_done || 0) / s.index_total) * 100);
+        detail = `<div class="stage-bar"><i style="width:${w}%"></i></div>
+          <span class="stage-sub">${s.index_done || 0}/${s.index_total} images${s.errors ? ` · ${s.errors} errors` : ""}</span>`;
+      } else if (st === "running") {
+        detail = `<div class="stage-bar indet"><i></i></div><span class="stage-sub">working…</span>`;
+      } else {
+        detail = `<span class="stage-sub">${STAGE_DESC[p] || ""}</span>`;
+      }
+      const dur = timings[p] != null ? `<span class="stage-dur">${timings[p]}s</span>` : "";
+      return `<div class="stage-card ${st}">
+        <div class="stage-top"><span class="stage-ico">${icon}</span>
+          <span class="stage-name">${STAGE_LABEL[p] || p}</span>${dur}</div>
+        ${detail}</div>`;
+    })
+    .join("");
+
+  // ---- one-line summary ----
+  const statusTxt = s.running
+    ? `Running: ${STAGE_LABEL[s.phase] || s.phase || "…"}`
+    : failed
+      ? "Failed"
+      : stopped
+        ? "Stopped"
+        : done.size
+          ? "Complete ✓"
+          : "Idle";
+  const parts = [];
+  if (s.faces_found != null) parts.push(`${s.faces_found} faces`);
+  if (s.started_at) parts.push(fmtDur((s.finished_at || Date.now() / 1000) - s.started_at));
+  document.getElementById("run-counts").textContent = `${statusTxt}${parts.length ? "   " + parts.join(" · ") : ""}`;
+
+  // ---- error + collapsible logs (auto-open on failure) ----
   const err = document.getElementById("run-error");
   if (s.error) {
     err.textContent = s.error;
@@ -213,13 +249,16 @@ function render(s) {
       det.classList.remove("hidden");
     } else det.classList.add("hidden");
   }
+  if (s.error) {
+    const logs = document.getElementById("run-logs");
+    if (logs) logs.open = true;
+  }
 
-  const stopBtn = document.getElementById("run-stop");
-  if (stopBtn) stopBtn.classList.toggle("hidden", !s.running);
+  document.getElementById("run-stop").classList.toggle("hidden", !s.running);
+  document.getElementById("run-again").classList.toggle("hidden", s.running);
 
   document.getElementById("live-face-count").textContent = s.faces_found || 0;
   document.getElementById("live-face-grid").innerHTML = (s.recent_face_ids || [])
     .map((id) => `<img loading="lazy" src="/api/p/${slug}/thumb/${id}" alt="Recently detected face">`)
     .join("");
-  document.getElementById("run-again").classList.toggle("hidden", s.running);
 }

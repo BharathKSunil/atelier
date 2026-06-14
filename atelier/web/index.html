@@ -78,30 +78,26 @@
         <div class="page-head">
           <div>
             <div class="eyebrow">Pipeline</div>
-            <h1>Indexing</h1>
+            <h1 id="run-title">Run</h1>
           </div>
+          <div class="spacer"></div>
+          <button id="run-stop" class="btn danger hidden">Stop run</button>
+          <button id="run-again" class="btn hidden">Re-run pipeline</button>
         </div>
         <div class="run-source" id="run-source"></div>
-        <div class="phase-steps" id="phase-steps"></div>
-        <div class="bar"><div id="run-bar-fill" class="bar-fill"></div></div>
         <div id="run-counts" class="counts"></div>
+        <div id="run-stages" class="run-stages"></div>
         <div id="run-error" class="run-error hidden"></div>
         <pre id="run-error-detail" class="run-error-detail hidden"></pre>
-        <div class="run-controls">
-          <button id="run-stop" class="btn danger hidden">Stop run</button>
-          <button id="run-pause" class="btn ghost">Pause updates</button>
+        <div class="run-live">
+          <h4>Faces found (<span id="live-face-count">0</span>)</h4>
+          <div id="live-face-grid" class="face-grid-live"></div>
         </div>
-        <div class="run-split">
-          <div>
-            <h4>Log</h4>
-            <pre id="run-log" class="run-log"></pre>
-          </div>
-          <div>
-            <h4>Faces found (<span id="live-face-count">0</span>)</h4>
-            <div id="live-face-grid" class="face-grid-live"></div>
-          </div>
-        </div>
-        <button id="run-again" class="btn hidden" style="margin-top: 18px">Re-run pipeline</button>
+        <details class="run-logs" id="run-logs">
+          <summary>View logs</summary>
+          <div class="run-log-head"><button id="run-pause" class="btn ghost">Pause updates</button></div>
+          <pre id="run-log" class="run-log"></pre>
+        </details>
       </section>
 
       <!-- Settings -->

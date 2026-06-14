@@ -1016,6 +1016,131 @@ h3 {
   font-size: 11px;
 }
 
+/* ---------- run stage cards ---------- */
+.run-stages {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 14px;
+  margin: 8px 0 22px;
+}
+.stage-card {
+  border: 1px solid var(--line-soft);
+  border-radius: 12px;
+  padding: 16px 18px;
+  background: var(--panel);
+  transition: 0.2s;
+}
+.stage-card.running {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 1px var(--gold-soft);
+}
+.stage-card.done {
+  border-color: var(--line);
+}
+.stage-card.failed {
+  border-color: var(--accent);
+}
+.stage-card.queued,
+.stage-card.skipped {
+  opacity: 0.55;
+}
+.stage-top {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 8px;
+}
+.stage-ico {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  font-size: 12px;
+  font-weight: 700;
+  background: var(--raised);
+  color: var(--muted);
+  flex: none;
+}
+.stage-card.done .stage-ico {
+  background: var(--gold);
+  color: var(--bg);
+}
+.stage-card.running .stage-ico {
+  background: var(--gold);
+  color: var(--bg);
+  animation: pulse 1.2s ease-in-out infinite;
+}
+.stage-card.failed .stage-ico {
+  background: var(--accent);
+  color: #fff;
+}
+.stage-name {
+  font-family: var(--serif);
+  font-size: 16px;
+  color: var(--ink);
+}
+.stage-dur {
+  margin-left: auto;
+  color: var(--faint);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.stage-sub {
+  color: var(--muted);
+  font-size: 12px;
+}
+.stage-bar {
+  height: 5px;
+  background: var(--line-soft);
+  border-radius: 999px;
+  overflow: hidden;
+  margin: 4px 0 6px;
+}
+.stage-bar > i {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), var(--gold));
+  transition: width 0.3s ease;
+}
+.stage-bar.indet > i {
+  width: 35%;
+  animation: indet 1.2s ease-in-out infinite;
+}
+@keyframes indet {
+  0% {
+    margin-left: -35%;
+  }
+  100% {
+    margin-left: 100%;
+  }
+}
+.run-live {
+  margin-bottom: 18px;
+}
+.run-live h4 {
+  margin: 0 0 10px;
+  color: var(--ink-dim);
+}
+.run-logs {
+  border-top: 1px solid var(--line-soft);
+  padding-top: 12px;
+}
+.run-logs > summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+  user-select: none;
+}
+.run-logs > summary:hover {
+  color: var(--ink);
+}
+.run-log-head {
+  margin: 12px 0 8px;
+}
+
 /* ---------- modals / lightbox ---------- */
 .modal {
   position: fixed;
