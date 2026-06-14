@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Atelier — photo culling</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<div class="topbar">
+  <span class="brand" id="brand">Atelier<span class="dot">.</span></span>
+  <span id="crumb" class="crumb hidden"></span>
+  <div class="spacer"></div>
+  <div id="modes" class="modes hidden"></div>
+</div>
+
+<!-- ===== Dashboard ===== -->
+<div id="screen-dashboard" class="screen">
+  <div class="wrap">
+    <div class="page-head">
+      <div>
+        <div class="eyebrow">Your libraries</div>
+        <h1>Projects</h1>
+      </div>
+      <div class="spacer"></div>
+      <button id="new-project-btn" class="btn">+ New project</button>
+    </div>
+    <div id="project-cards" class="proj-grid"></div>
+  </div>
+</div>
+
+<!-- ===== Project workspace ===== -->
+<div id="screen-project" class="screen hidden">
+  <!-- Review / cull -->
+  <section id="view-review" class="review hidden">
+    <div class="rev-bar">
+      <button class="icon-btn" id="rv-prev" title="Previous burst (←)">‹</button>
+      <span class="count" id="rv-count">—</span>
+      <div class="progress"><i id="rv-progress"></i></div>
+      <button class="btn ghost" id="rv-star" title="Star for printing (S)">☆ Add to print list</button>
+      <button class="icon-btn" id="rv-fs" title="Fullscreen (F)">⛶</button>
+      <button class="icon-btn" id="rv-next" title="Next burst (→)">›</button>
+    </div>
+    <div class="stage" id="rv-stage"></div>
+    <div class="strip" id="rv-strip"></div>
+    <div class="help-fab" id="rv-help">
+      <span>←→</span> bursts <span>↑↓</span> frames <span>Space</span> print
+      <span>1·2·3</span> tag <span>F</span> full <span>↵</span> zoom
+    </div>
+  </section>
+
+  <!-- People -->
+  <section id="view-people" class="wrap hidden"><div id="people-root"></div></section>
+
+  <!-- Print list -->
+  <section id="view-prints" class="wrap hidden">
+    <div class="page-head">
+      <div><div class="eyebrow">Selected for print</div><h1>Print list</h1></div>
+      <span class="sub" id="prints-count"></span>
+      <div class="spacer"></div>
+      <button class="btn" id="prints-export">Export all</button>
+    </div>
+    <div id="prints-root"></div>
+  </section>
+
+  <!-- Run -->
+  <section id="view-run" class="wrap run hidden">
+    <div class="page-head"><div><div class="eyebrow">Pipeline</div><h1>Indexing</h1></div></div>
+    <div class="run-source" id="run-source"></div>
+    <div class="phase-steps" id="phase-steps"></div>
+    <div class="bar"><div id="run-bar-fill" class="bar-fill"></div></div>
+    <div id="run-counts" class="counts"></div>
+    <div id="run-error" class="run-error hidden"></div>
+    <div class="run-split">
+      <div><h4>Log</h4><pre id="run-log" class="run-log"></pre></div>
+      <div><h4>Faces found (<span id="live-face-count">0</span>)</h4><div id="live-face-grid" class="face-grid-live"></div></div>
+    </div>
+    <button id="run-again" class="btn hidden" style="margin-top:18px">Re-run pipeline</button>
+  </section>
+
+  <!-- Settings -->
+  <section id="view-settings" class="wrap hidden"><div id="settings-root"></div></section>
+</div>
+
+<!-- ===== Modals ===== -->
+<div id="modal-new" class="modal hidden">
+  <div class="modal-box">
+    <button class="modal-x" id="np-cancel-x">&times;</button>
+    <h3>New project</h3>
+    <label>Name</label>
+    <input id="np-name" type="text" placeholder="e.g. Maya &amp; Sam — June 2026">
+    <label>Source folder</label>
+    <div class="folder-row">
+      <input id="np-folder" type="text" placeholder="Choose a folder…" spellcheck="false">
+      <button id="np-choose" class="btn ghost">Choose…</button>
+    </div>
+    <p class="muted" style="font-size:12px;margin-top:12px">Originals are never modified. A fresh database is created for this project.</p>
+    <div class="modal-actions">
+      <button id="np-cancel" class="btn ghost">Cancel</button>
+      <button id="np-create" class="btn">Create &amp; index</button>
+    </div>
+  </div>
+</div>
+
+<div id="modal-merge" class="modal hidden">
+  <div class="modal-box">
+    <button class="modal-x" id="mg-x">&times;</button>
+    <h3>Merge “<span id="mg-name"></span>” into…</h3>
+    <input id="mg-search" type="text" placeholder="Search people…" spellcheck="false">
+    <div id="mg-list" class="merge-list"></div>
+  </div>
+</div>
+
+<div id="modal-face" class="modal hidden"><div class="modal-box wide" id="face-box"></div></div>
+
+<div id="lightbox" class="lightbox hidden">
+  <button class="lb-close" id="lb-close">&times;</button>
+  <button class="lb-nav prev" id="lb-prev">‹</button>
+  <img id="lightbox-img" alt="">
+  <button class="lb-nav next" id="lb-next">›</button>
+  <div class="lb-cap" id="lb-cap"></div>
+</div>
+
+<div class="toasts" id="toasts"></div>
+
+<script type="module" src="/static/main.js"></script>
+</body>
+</html>

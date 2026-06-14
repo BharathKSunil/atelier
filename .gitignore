@@ -1,0 +1,14 @@
+.venv/
+__pycache__/
+*.pyc
+*.db
+*.db-wal
+*.db-shm
+print_exports/
+.pytest_cache/
+.server.pid
+server.log
+demo_photos/
+real_test/
+real_test2/
+models/

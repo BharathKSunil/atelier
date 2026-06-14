@@ -1,0 +1,147 @@
+#!/usr/bin/env python3
+"""Phase 1 — Index. Decode each photo once (EXIF-uprighted) at full res for
+sharpness, downscale for detection + embedding. Resumable; re-running skips
+already-processed images.
+
+Per image:
+  full-res   -> global sharpness + exposure, per-face crop sharpness
+  downscaled -> insightface RetinaFace/SCRFD detect + ArcFace 512-d embed
+                (quality-gated) + DINOv2 384-d global embed for burst grouping
+"""
+import argparse
+import io
+import os
+
+from tqdm import tqdm
+
+from facelib import config, db, imaging, models, quality
+
+
+def _crop_full(full_img, box, scale):
+    """Map a box in analysis coords back to original coords and crop full-res."""
+    x1, y1, x2, y2 = (v / scale for v in box)
+    x1, y1 = max(0, int(x1)), max(0, int(y1))
+    x2 = min(full_img.width, int(x2))
+    y2 = min(full_img.height, int(y2))
+    if x2 <= x1 or y2 <= y1:
+        return None, (x1, y1, x2, y2)
+    return full_img.crop((x1, y1, x2, y2)), (x1, y1, x2, y2)
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--photos", required=True, help="Root folder of nested photos")
+    ap.add_argument("--db", default="faces.db")
+    ap.add_argument("--retry-errors", action="store_true",
+                    help="Re-process images previously marked as errored (processed=2)")
+    ap.add_argument("--det-threshold", type=float, default=config.FACE_DET_THRESHOLD)
+    ap.add_argument("--min-px", type=int, default=config.FACE_MIN_PX)
+    ap.add_argument("--min-sharpness", type=float, default=config.FACE_MIN_SHARPNESS)
+    ap.add_argument("--min-frontality", type=float, default=config.FACE_MIN_FRONTALITY)
+    args = ap.parse_args()
+    det_thr, min_px, min_sharp = args.det_threshold, args.min_px, args.min_sharpness
+    min_front = args.min_frontality
+
+    conn = db.init_db(args.db)
+    device = models.get_device()
+    print(f"device = {device}")
+
+    cur = conn.cursor()
+    if args.retry_errors:
+        n = cur.execute("UPDATE images SET processed=0 WHERE processed=2").rowcount
+        conn.commit()
+        print(f"reset {n} errored images for retry")
+    existing = {r["path"] for r in cur.execute("SELECT path FROM images")}
+    added = 0
+    for p in imaging.iter_images(args.photos):
+        sp = str(p)
+        if sp not in existing:
+            cur.execute("INSERT OR IGNORE INTO images(path, processed) VALUES(?, 0)", (sp,))
+            added += 1
+    conn.commit()
+    print(f"enqueued {added} new images")
+
+    pending = list(cur.execute("SELECT id, path FROM images WHERE processed = 0"))
+    print(f"{len(pending)} pending")
+
+    for row in tqdm(pending):
+        iid, path = row["id"], row["path"]
+        try:
+            # idempotent re-index: clear this image's faces (and any stale override
+            # anchors on them — face ids are reassigned on re-insert, and the FK would
+            # otherwise block the delete).
+            cur.execute("""DELETE FROM person_overrides WHERE face_id IN
+                           (SELECT id FROM faces WHERE image_id=?)""", (iid,))
+            cur.execute("DELETE FROM faces WHERE image_id=?", (iid,))
+            img = imaging.load_rgb(path)
+            W, H = img.size
+            taken_at, exif_time, sub_sec, camera, orient = imaging.read_metadata(path, img)
+
+            gray_full = imaging.to_gray_array(img)
+            graw = quality.laplacian_var(gray_full)
+            gsharp = quality.norm_sharpness(graw)
+            expo = quality.exposure_score(gray_full)
+
+            ithumb = img.copy()
+            ithumb.thumbnail((config.IMAGE_THUMB_MAX, config.IMAGE_THUMB_MAX))
+            ibuf = io.BytesIO()
+            ithumb.save(ibuf, "JPEG", quality=80)
+
+            small, scale = imaging.analysis_resize(img, config.ANALYSIS_LONG_EDGE)
+            gemb = models.embed_global(small, device)
+            dets = models.detect_and_embed(small, device)
+
+            # gate out non-faces before they ever cluster: detector confidence + size
+            face_rows = []
+            for d in dets:
+                if d["score"] < det_thr:
+                    continue
+                x1, y1, x2, y2 = d["bbox"]
+                if min(x2 - x1, y2 - y1) < min_px:
+                    continue
+                kps = d.get("kps")
+                if kps is not None and quality.frontality(kps[0], kps[1], kps[2]) < min_front:
+                    continue                         # drop profiles / ears (unreliable embedding)
+                crop, (ox1, oy1, ox2, oy2) = _crop_full(img, d["bbox"], scale)
+                if crop is None:
+                    continue
+                fraw = quality.laplacian_var(imaging.to_gray_array(crop))
+                if quality.squash_sharpness(fraw) < min_sharp:
+                    continue                         # drop out-of-focus blobs
+                thumb = crop.copy()
+                thumb.thumbnail((config.THUMB_MAX, config.THUMB_MAX))
+                buf = io.BytesIO()
+                thumb.save(buf, "JPEG", quality=85)
+                face_rows.append((ox1, oy1, ox2, oy2, d["score"],
+                                  d["embedding"].tobytes(), buf.getvalue(),
+                                  quality.norm_sharpness(fraw), fraw))
+
+            cur.execute(
+                """UPDATE images SET file_size=?, width=?, height=?, taken_at=?, exif_time=?,
+                   sub_sec=?, camera=?, orientation=?, global_embedding=?, global_sharpness=?,
+                   global_sharpness_raw=?, exposure_score=?, thumbnail=?, face_count=?,
+                   processed=1, error_msg=NULL WHERE id=?""",
+                (os.path.getsize(path), W, H, taken_at, 1 if exif_time else 0, sub_sec, camera,
+                 orient, gemb.tobytes(), gsharp, graw, expo, ibuf.getvalue(), len(face_rows), iid),
+            )
+            for fi, fr in enumerate(face_rows):
+                cur.execute(
+                    """INSERT INTO faces(image_id, face_index, bbox_x1, bbox_y1, bbox_x2,
+                       bbox_y2, confidence, embedding, thumbnail, face_sharpness, face_sharpness_raw)
+                       VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
+                    (iid, fi, *fr))
+            conn.commit()
+        except Exception as e:  # noqa: BLE001 — record and continue, stay resumable
+            conn.rollback()
+            cur.execute("UPDATE images SET processed=2, error_msg=? WHERE id=?",
+                        (str(e)[:500], iid))
+            conn.commit()
+
+    done = cur.execute("SELECT COUNT(*) n FROM images WHERE processed=1").fetchone()["n"]
+    err = cur.execute("SELECT COUNT(*) n FROM images WHERE processed=2").fetchone()["n"]
+    nfaces = cur.execute("SELECT COUNT(*) n FROM faces").fetchone()["n"]
+    print(f"done: {done} indexed, {nfaces} faces, {err} errors")
+
+
+if __name__ == "__main__":
+    main()
