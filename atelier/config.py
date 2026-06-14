@@ -12,6 +12,10 @@ def default_projects_dir():
 # -> ~2.7x detection / ~16x recognition here; CUDA on nvidia; else CPU).
 INSIGHTFACE_PROVIDERS = None
 
+# A run phase producing no output for this many seconds is treated as stalled
+# (e.g. a hung model download) and terminated, so the UI fails instead of hanging.
+RUN_PHASE_STALL_TIMEOUT_S = 1800
+
 # --- Decode / sizing ---
 ANALYSIS_LONG_EDGE = 1536   # downscale long edge for detection + global embedding
 THUMB_MAX = 256             # stored face thumbnail max edge (px)

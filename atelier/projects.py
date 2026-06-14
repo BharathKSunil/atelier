@@ -59,6 +59,10 @@ def log_path(projects_dir, slug):
     return os.path.join(projects_dir, slug, "run.log")
 
 
+def runs_dir(projects_dir, slug):
+    return os.path.join(projects_dir, slug, "runs")
+
+
 def list_projects(projects_dir):
     return _load(projects_dir)
 

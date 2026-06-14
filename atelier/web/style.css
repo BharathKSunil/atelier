@@ -250,6 +250,8 @@ h1, h2, h3 { font-family: var(--serif); font-weight: 500; letter-spacing: -0.01e
 .face-grid-live { display: grid; grid-template-columns: repeat(auto-fill, minmax(60px, 1fr)); gap: 6px; height: 300px; overflow-y: auto; align-content: start; }
 .face-grid-live img { width: 100%; height: 60px; object-fit: cover; border-radius: 7px; background: var(--raised); }
 .run-error { margin-top: 14px; background: #2a1513; border: 1px solid var(--accent-soft); color: #f0bcc0; border-radius: 10px; padding: 12px; font: 12px/1.5 ui-monospace, monospace; }
+.run-error-detail { margin: 8px 0 0; background: #1c0f0e; border: 1px solid var(--accent-soft); color: #d9a7ab; border-radius: 10px; padding: 12px; max-height: 220px; overflow-y: auto; white-space: pre-wrap; font: 11px/1.5 ui-monospace, monospace; }
+.step-dur { color: var(--line); font-size: 11px; }
 
 /* ---------- modals / lightbox ---------- */
 .modal { position: fixed; inset: 0; background: rgba(8,6,4,.72); display: flex; align-items: center; justify-content: center; z-index: 60; backdrop-filter: blur(6px); animation: fade .2s; }

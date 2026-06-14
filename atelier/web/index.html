@@ -73,7 +73,11 @@
     <div class="bar"><div id="run-bar-fill" class="bar-fill"></div></div>
     <div id="run-counts" class="counts"></div>
     <div id="run-error" class="run-error hidden"></div>
-    <div class="run-controls"><button id="run-pause" class="btn ghost">Pause updates</button></div>
+    <pre id="run-error-detail" class="run-error-detail hidden"></pre>
+    <div class="run-controls">
+      <button id="run-stop" class="btn danger hidden">Stop run</button>
+      <button id="run-pause" class="btn ghost">Pause updates</button>
+    </div>
     <div class="run-split">
       <div><h4>Log</h4><pre id="run-log" class="run-log"></pre></div>
       <div><h4>Faces found (<span id="live-face-count">0</span>)</h4><div id="live-face-grid" class="face-grid-live"></div></div>

@@ -124,6 +124,19 @@ MIGRATIONS = [
         "CREATE INDEX IF NOT EXISTS idx_picks_image ON picks(image_id)",
         "ALTER TABLE images ADD COLUMN candid_score REAL",
     ]),
+    # v6 — persistent run history: each pipeline run is recorded so history and
+    # per-run logs survive a server restart (status reconciled to 'interrupted').
+    (6, [
+        """CREATE TABLE IF NOT EXISTS runs (
+             id INTEGER PRIMARY KEY,
+             started_at REAL,
+             finished_at REAL,
+             status TEXT,
+             phases TEXT,
+             error TEXT,
+             log_file TEXT
+           )""",
+    ]),
 ]
 
 SCHEMA_VERSION = MIGRATIONS[-1][0] if MIGRATIONS else 0

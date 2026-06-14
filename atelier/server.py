@@ -15,7 +15,16 @@ import shutil
 import sqlite3
 from urllib.parse import urlparse
 
-from flask import Flask, Response, abort, jsonify, request, send_file, send_from_directory
+from flask import (
+    Flask,
+    Response,
+    abort,
+    jsonify,
+    request,
+    send_file,
+    send_from_directory,
+    stream_with_context,
+)
 from werkzeug.exceptions import HTTPException
 
 from atelier import config, db, fsdialog, migrate, overrides, projects, settings
@@ -90,7 +99,8 @@ def create_app(projects_dir):
 
     def _runner(slug):
         return get_runner(slug, projects.db_path(projects_dir, slug),
-                          projects.log_path(projects_dir, slug))
+                          projects.log_path(projects_dir, slug),
+                          projects.runs_dir(projects_dir, slug))
 
     def _page():
         try:
@@ -206,6 +216,50 @@ def create_app(projects_dir):
     def run_status(slug):
         _require(slug)
         return jsonify(_runner(slug).status())
+
+    @app.post("/api/p/<slug>/run/stop")
+    def run_stop(slug):
+        _require(slug)
+        ok, msg = _runner(slug).cancel()
+        return jsonify(ok=ok, msg=msg), (200 if ok else 409)
+
+    def _since():
+        try:
+            return int(request.args.get("since", 0))
+        except ValueError:
+            return 0
+
+    @app.get("/api/p/<slug>/run/log")
+    def run_log(slug):
+        _require(slug)
+        return jsonify(lines=_runner(slug).log_lines(since=_since()))
+
+    @app.get("/api/p/<slug>/run/stream")
+    def run_stream(slug):
+        _require(slug)
+        r, since = _runner(slug), _since()
+
+        def gen():
+            yield "retry: 3000\n\n"
+            for n, t in r.stream(since=since):
+                yield f"id: {n}\ndata: {json.dumps(t)}\n\n"
+            yield "event: end\ndata: {}\n\n"
+        return Response(stream_with_context(gen()), mimetype="text/event-stream",
+                        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+    @app.get("/api/p/<slug>/runs")
+    def runs_list(slug):
+        _require(slug)
+        return jsonify(_runner(slug).runs())
+
+    @app.get("/api/p/<slug>/runs/<int:rid>/log")
+    def run_history_log(slug, rid):
+        _require(slug)
+        path = _runner(slug).run_log_path(rid)
+        if not path or not os.path.exists(path):
+            abort(404)
+        with open(path, encoding="utf-8", errors="replace") as f:
+            return Response(f.read(), mimetype="text/plain")
 
     # ----- stats -----
     @app.get("/api/p/<slug>/stats")
