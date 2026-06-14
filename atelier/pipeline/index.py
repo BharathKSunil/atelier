@@ -12,9 +12,19 @@ import argparse
 import io
 import os
 
+import numpy as np
 from tqdm import tqdm
 
-from atelier import config, db, imaging, models, quality
+from atelier import config, db, imaging, landmarks, models, quality
+
+
+def _pad_crop(pil_img, box, pad=0.4):
+    """Crop `box` from a PIL image with `pad` fractional context (for the MediaPipe check)."""
+    x1, y1, x2, y2 = box
+    w, h = x2 - x1, y2 - y1
+    cx1, cy1 = max(0, int(x1 - w * pad)), max(0, int(y1 - h * pad))
+    cx2, cy2 = min(pil_img.width, int(x2 + w * pad)), min(pil_img.height, int(y2 + h * pad))
+    return pil_img.crop((cx1, cy1, cx2, cy2)).convert("RGB")
 
 
 def _crop_full(full_img, box, scale):
@@ -92,16 +102,28 @@ def main():
             dets = models.detect_and_embed(small, device)
 
             # gate out non-faces before they ever cluster: detector confidence + size
+            # + box shape + keypoint geometry + (for borderline) a MediaPipe second opinion.
             face_rows = []
             for d in dets:
                 if d["score"] < det_thr:
                     continue
                 x1, y1, x2, y2 = d["bbox"]
-                if min(x2 - x1, y2 - y1) < min_px:
+                w, h = x2 - x1, y2 - y1
+                if min(w, h) < min_px:
                     continue
                 kps = d.get("kps")
                 if kps is not None and quality.frontality(kps[0], kps[1], kps[2]) < min_front:
                     continue                         # drop profiles / ears (unreliable embedding)
+                # Non-face filters apply ONLY to borderline detections; SCRFD >= 0.80 is
+                # trusted (keeps real profiles/odd crops). Hair/fabric sit at 0.65-0.80.
+                if d["score"] < config.FACE_DET_AUTO_ACCEPT:
+                    if not (0.6 <= w / max(h, 1e-6) <= 1.7):                 # faces ~square-ish
+                        continue
+                    if kps is not None and not quality.kps_plausible(kps, d["bbox"]):
+                        continue                     # impossible eye/nose/mouth layout
+                    if (config.FACE_VERIFY_LANDMARKS
+                            and not landmarks.has_face(np.asarray(_pad_crop(small, d["bbox"])))):
+                        continue                     # MediaPipe second opinion: no face here
                 crop, (ox1, oy1, ox2, oy2) = _crop_full(img, d["bbox"], scale)
                 if crop is None:
                     continue

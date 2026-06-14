@@ -36,8 +36,13 @@ INSIGHTFACE_DET_SIZE = 640   # SCRFD standard; larger can MISS frame-filling fac
 # dominated by blurry/backlit faces, then re-index.
 RECOGNITION_MODEL = "arcface"   # or "adaface"
 
-# Quality gates applied at index time (reject non-faces before they ever cluster):
-FACE_DET_THRESHOLD = 0.60   # min detector confidence (drops jewelry/skin false positives)
+# Quality gates applied at index time (reject non-faces before they ever cluster).
+# Tuned from a measured score distribution: SCRFD false-positives on hair/fabric/
+# backs-of-heads land at ~0.60-0.65, real faces at 0.80-0.99.
+FACE_DET_THRESHOLD = 0.65   # min detector confidence (valley between junk and real faces)
+FACE_DET_AUTO_ACCEPT = 0.80  # >= this -> trust SCRFD (skips the landmark gate, keeps profiles)
+FACE_VERIFY_LANDMARKS = True  # for borderline faces, require MediaPipe to also find a face
+                              # on the crop (hair/fabric have no eye/nose/mouth geometry)
 FACE_MIN_PX = 32            # min bbox side in the analysis image (drops tiny background faces)
 FACE_MIN_SHARPNESS = 0.12   # min squashed sharpness (drops out-of-focus blobs)
 FACE_MIN_FRONTALITY = 0.35  # min frontality from detector keypoints (drops profiles/ears

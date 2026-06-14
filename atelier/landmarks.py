@@ -48,3 +48,12 @@ def landmarks_px(rgb_array):
         return None
     h, w = rgb_array.shape[:2]
     return np.array([[p.x * w, p.y * h] for p in res.face_landmarks[0]], dtype=np.float64)
+
+
+def has_face(rgb_array):
+    """Second-opinion face/non-face check: True iff MediaPipe also finds a face on
+    the crop. Hair/fabric/backs-of-heads have no landmark geometry -> False."""
+    try:
+        return landmarks_px(rgb_array) is not None
+    except Exception:
+        return True   # if mediapipe is unavailable, don't block detection

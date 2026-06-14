@@ -97,6 +97,27 @@ def smile(mouth_left, mouth_right, lip_top, lip_bottom):
     return float(np.clip((h / (w + 1e-6)) * 2.5, 0.0, 1.0))
 
 
+def kps_plausible(kps, box):
+    """Anatomical sanity on the detector's 5 keypoints [left_eye, right_eye, nose,
+    mouth_left, mouth_right] (image coords). Rejects the collapsed/impossible
+    geometry typical of hair/fabric/back-of-head false positives. Cheap, no model."""
+    k = np.asarray(kps, dtype=np.float64)
+    if k.shape[0] < 5:
+        return False
+    le, re, nose, ml, mr = k[0], k[1], k[2], k[3], k[4]
+    x1, y1, x2, y2 = box
+    w, h = max(x2 - x1, 1.0), max(y2 - y1, 1.0)
+    for p in k:                                  # all keypoints near/inside the box
+        if not (x1 - 0.2 * w <= p[0] <= x2 + 0.2 * w and y1 - 0.2 * h <= p[1] <= y2 + 0.2 * h):
+            return False
+    if le[0] >= re[0]:                           # left eye left of right eye
+        return False
+    eye_y, mouth_y, tol = (le[1] + re[1]) / 2.0, (ml[1] + mr[1]) / 2.0, 0.1 * h
+    if not (eye_y < nose[1] + tol and nose[1] < mouth_y + tol and eye_y < mouth_y):
+        return False
+    return True
+
+
 # ---------------------------------------------------------------- composites
 def face_quality(sharp, bright, eye, frontal, sm):
     """Best-face-of-a-person score. All inputs in [0,1]."""
