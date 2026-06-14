@@ -7,8 +7,13 @@ import { mountPrints } from "./prints.js";
 import { mountRun, unmountRun } from "./run.js";
 import { mountSettings } from "./settings.js";
 
-const MODES = [["review", "Review"], ["people", "People"], ["prints", "Print list"],
-  ["run", "Run"], ["settings", "Settings"]];
+const MODES = [
+  ["review", "Review"],
+  ["people", "People"],
+  ["prints", "Print list"],
+  ["run", "Run"],
+  ["settings", "Settings"],
+];
 
 function parse() {
   const m = location.hash.replace(/^#/, "").match(/^\/p\/([^/]+)\/(\w+)/);
@@ -22,7 +27,8 @@ async function render() {
 }
 
 function showDashboard() {
-  unmountReview(); unmountRun();
+  unmountReview();
+  unmountRun();
   document.getElementById("screen-project").classList.add("hidden");
   document.getElementById("screen-dashboard").classList.remove("hidden");
   document.getElementById("crumb").classList.add("hidden");
@@ -42,10 +48,13 @@ async function showProject(slug, mode) {
 
   const modesEl = document.getElementById("modes");
   modesEl.classList.remove("hidden");
-  modesEl.innerHTML = MODES.map(([k, label]) =>
-    `<button class="mode ${k === mode ? "active" : ""}" data-mode="${k}">${label}</button>`).join("");
+  modesEl.innerHTML = MODES.map(
+    ([k, label]) => `<button class="mode ${k === mode ? "active" : ""}" data-mode="${k}">${label}</button>`,
+  ).join("");
   modesEl.querySelectorAll(".mode").forEach((b) => {
-    b.onclick = () => { location.hash = `#/p/${slug}/${b.dataset.mode}`; };
+    b.onclick = () => {
+      location.hash = `#/p/${slug}/${b.dataset.mode}`;
+    };
   });
 
   for (const [k] of MODES) document.getElementById(`view-${k}`).classList.toggle("hidden", k !== mode);
@@ -59,15 +68,19 @@ async function showProject(slug, mode) {
   else if (mode === "settings") mountSettings(slug);
 }
 
-document.getElementById("brand").onclick = () => { location.hash = "#/"; };
-document.getElementById("crumb").onclick = () => { location.hash = "#/"; };
+document.getElementById("brand").onclick = () => {
+  location.hash = "#/";
+};
+document.getElementById("crumb").onclick = () => {
+  location.hash = "#/";
+};
 
 // ---- focus trap for modals ----
-const FOCUSABLE = 'a[href],area[href],input:not([disabled]),select:not([disabled]),textarea:not([disabled]),button:not([disabled]),[tabindex]:not([tabindex="-1"])';
+const FOCUSABLE =
+  'a[href],area[href],input:not([disabled]),select:not([disabled]),textarea:not([disabled]),button:not([disabled]),[tabindex]:not([tabindex="-1"])';
 
 function focusableIn(el) {
-  return [...el.querySelectorAll(FOCUSABLE)].filter(
-    (n) => n.offsetParent !== null || n === document.activeElement);
+  return [...el.querySelectorAll(FOCUSABLE)].filter((n) => n.offsetParent !== null || n === document.activeElement);
 }
 
 // Trap state per modal id so re-entrancy / multiple modals are safe.
@@ -80,14 +93,23 @@ function trapFocus(modal) {
   const onKeydown = (e) => {
     if (e.key !== "Tab") return;
     const items = focusableIn(box);
-    if (!items.length) { e.preventDefault(); return; }
+    if (!items.length) {
+      e.preventDefault();
+      return;
+    }
     const first = items[0];
     const last = items[items.length - 1];
     const active = document.activeElement;
     if (e.shiftKey) {
-      if (active === first || !box.contains(active)) { e.preventDefault(); last.focus(); }
+      if (active === first || !box.contains(active)) {
+        e.preventDefault();
+        last.focus();
+      }
     } else {
-      if (active === last || !box.contains(active)) { e.preventDefault(); first.focus(); }
+      if (active === last || !box.contains(active)) {
+        e.preventDefault();
+        first.focus();
+      }
     }
   };
   modal.addEventListener("keydown", onKeydown);
@@ -120,7 +142,8 @@ function watchModal(id) {
     const open = !modal.classList.contains("hidden");
     if (open === wasOpen) return;
     wasOpen = open;
-    if (open) trapFocus(modal); else releaseFocus(modal);
+    if (open) trapFocus(modal);
+    else releaseFocus(modal);
   });
   mo.observe(modal, { attributes: true, attributeFilter: ["class"] });
 }
@@ -130,7 +153,10 @@ function watchModal(id) {
 window.addEventListener("keydown", (e) => {
   if (e.key !== "Escape") return;
   const lb = document.getElementById("lightbox");
-  if (!lb.classList.contains("hidden")) { lb.classList.add("hidden"); return; }
+  if (!lb.classList.contains("hidden")) {
+    lb.classList.add("hidden");
+    return;
+  }
   const open = document.querySelector(".modal:not(.hidden)");
   if (open) open.classList.add("hidden");
 });

@@ -14,8 +14,9 @@ let values = {};
 export async function mountSettings(s) {
   slug = s;
   let data;
-  try { data = await api(`/api/p/${slug}/settings`); }
-  catch {
+  try {
+    data = await api(`/api/p/${slug}/settings`);
+  } catch {
     document.getElementById("settings-root").innerHTML =
       `<div class="empty"><div class="big">Couldn’t load settings</div>Check the connection and try again.</div>`;
     return;
@@ -38,7 +39,11 @@ function render() {
   spec.forEach((k) => {
     const slider = root.querySelector(`input[type=range][data-k="${k.key}"]`);
     const num = root.querySelector(`input[type=number][data-k="${k.key}"]`);
-    const sync = (v) => { values[k.key] = +v; slider.value = v; num.value = v; };
+    const sync = (v) => {
+      values[k.key] = +v;
+      slider.value = v;
+      num.value = v;
+    };
     slider.oninput = () => sync(slider.value);
     num.oninput = () => sync(num.value);
   });
@@ -72,26 +77,40 @@ function knob(k) {
 
 function putValues() {
   return api(`/api/p/${slug}/settings`, {
-    method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ values }),
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ values }),
   });
 }
 
 async function saveOnly() {
-  try { await putValues(); toast("Settings saved"); }
-  catch { toast("Could not save settings", true); }
+  try {
+    await putValues();
+    toast("Settings saved");
+  } catch {
+    toast("Could not save settings", true);
+  }
 }
 
 async function applyGroup(group) {
   const act = GROUP_ACTION[group];
   // A full re-index re-detects every photo — gate it behind an explicit confirm.
-  if (act && act.affects === "reindex" &&
-      !confirm("Re-index all photos? This can take a while.")) return;
-  try { await putValues(); }
-  catch { return toast("Could not save settings", true); }
-  if (!act) { toast("Saved"); return; }
+  if (act && act.affects === "reindex" && !confirm("Re-index all photos? This can take a while.")) return;
+  try {
+    await putValues();
+  } catch {
+    return toast("Could not save settings", true);
+  }
+  if (!act) {
+    toast("Saved");
+    return;
+  }
   let r;
-  try { r = await post(`/api/p/${slug}/run`, { affects: act.affects }); }
-  catch { return toast("Could not start re-run", true); }
+  try {
+    r = await post(`/api/p/${slug}/run`, { affects: act.affects });
+  } catch {
+    return toast("Could not start re-run", true);
+  }
   if (!r.ok) return toast(r.msg || "could not start", true);
   toast(`Saved — ${act.affects} started`);
   location.hash = `#/p/${slug}/run`;

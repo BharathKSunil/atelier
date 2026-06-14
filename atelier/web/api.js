@@ -19,7 +19,9 @@ export async function api(p, o) {
   if (!res.ok) {
     // don't try to JSON-parse HTML error pages
     let detail = "";
-    try { detail = (await res.text()).slice(0, 200); } catch {}
+    try {
+      detail = (await res.text()).slice(0, 200);
+    } catch {}
     const err = new Error(`HTTP ${res.status} on ${p}${detail ? ` — ${detail}` : ""}`);
     err.status = res.status;
     throw err;
@@ -27,21 +29,30 @@ export async function api(p, o) {
   return res.json();
 }
 
-export const post = (p, b) => api(p, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(b || {}) });
+export const post = (p, b) =>
+  api(p, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(b || {}) });
 export const del = (p) => api(p, { method: "DELETE" });
 
 export const pct = (v) => (v == null ? "–" : Math.round(v * 100) + "%");
-export const base = (p) => String(p || "").split("/").pop();
+export const base = (p) =>
+  String(p || "")
+    .split("/")
+    .pop();
 export function escapeHtml(s) {
-  return String(s == null ? "" : s).replace(/[&<>"']/g, (c) =>
-    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  return String(s == null ? "" : s).replace(
+    /[&<>"']/g,
+    (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c],
+  );
 }
 export function toast(msg, err) {
   const w = document.getElementById("toasts");
   const t = document.createElement("div");
   t.className = "toast" + (err ? " err" : "");
   t.textContent = msg;
-  const dismiss = () => { t.style.opacity = "0"; setTimeout(() => t.remove(), 300); };
+  const dismiss = () => {
+    t.style.opacity = "0";
+    setTimeout(() => t.remove(), 300);
+  };
   if (err) {
     // sticky: stays until clicked
     t.classList.add("sticky");

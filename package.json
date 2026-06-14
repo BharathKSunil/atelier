@@ -1,0 +1,19 @@
+{
+  "name": "atelier-web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Lint/format tooling for the Atelier web SPA (vanilla ES modules, no build step).",
+  "scripts": {
+    "lint": "eslint atelier/web && prettier --check \"atelier/web/**/*.{js,css,html}\"",
+    "lint:js": "eslint atelier/web",
+    "format": "prettier --write \"atelier/web/**/*.{js,css,html}\"",
+    "format:check": "prettier --check \"atelier/web/**/*.{js,css,html}\""
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.12.0",
+    "eslint": "^9.12.0",
+    "globals": "^15.11.0",
+    "prettier": "^3.3.3"
+  }
+}

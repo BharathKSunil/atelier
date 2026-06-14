@@ -9,22 +9,40 @@ let currentPerson = null;
 let query = "";
 let searchTimer = null;
 
-function killObs() { observers.forEach((o) => o.disconnect()); observers = []; }
+function killObs() {
+  observers.forEach((o) => o.disconnect());
+  observers = [];
+}
 
 function infinite({ root, sentinel, fetchPage, renderItem, onPage }) {
-  let offset = 0, busy = false, done = false;
+  let offset = 0,
+    busy = false,
+    done = false;
   async function more() {
     if (busy || done) return;
     busy = true;
     let r;
-    try { r = await fetchPage(offset); }
-    catch { busy = false; toast("Could not load list", true); return; }
+    try {
+      r = await fetchPage(offset);
+    } catch {
+      busy = false;
+      toast("Could not load list", true);
+      return;
+    }
     if (onPage) onPage(r, offset);
     (r.items || []).forEach(renderItem);
-    if (r.next_offset == null) { done = true; sentinel.remove(); } else offset = r.next_offset;
+    if (r.next_offset == null) {
+      done = true;
+      sentinel.remove();
+    } else offset = r.next_offset;
     busy = false;
   }
-  const io = new IntersectionObserver((es) => { if (es[0].isIntersecting) more(); }, { root: root || null, rootMargin: "600px" });
+  const io = new IntersectionObserver(
+    (es) => {
+      if (es[0].isIntersecting) more();
+    },
+    { root: root || null, rootMargin: "600px" },
+  );
   io.observe(sentinel);
   observers.push(io);
   more();
@@ -33,7 +51,7 @@ function infinite({ root, sentinel, fetchPage, renderItem, onPage }) {
 export function mountPeople(s) {
   slug = s;
   query = "";
-  currentPerson = null;   // leaving detail view — stale snapshot must not outlive it
+  currentPerson = null; // leaving detail view — stale snapshot must not outlive it
   renderPeople();
 }
 
@@ -52,7 +70,7 @@ function renderPeople() {
       const v = searchEl.value.trim();
       if (v === query) return;
       query = v;
-      loadGrid();           // reset paging for the new query
+      loadGrid(); // reset paging for the new query
     }, 200);
   };
   loadGrid();
@@ -71,7 +89,8 @@ function loadGrid() {
   }
   const q = query ? `&q=${encodeURIComponent(query)}` : "";
   infinite({
-    root: null, sentinel,
+    root: null,
+    sentinel,
     fetchPage: (off) => api(`/api/p/${slug}/persons?offset=${off}&limit=60${q}`),
     renderItem: (p) => {
       const name = p.display_name || `Person ${p.id}`;
@@ -85,7 +104,12 @@ function loadGrid() {
         <div class="nm">${escapeHtml(name)}</div><div class="ct">${p.cnt} photos</div>`;
       const open = () => openPerson(p);
       el.onclick = open;
-      el.onkeydown = (e) => { if (e.key === "Enter" || e.key === " " || e.key === "Spacebar") { e.preventDefault(); open(); } };
+      el.onkeydown = (e) => {
+        if (e.key === "Enter" || e.key === " " || e.key === "Spacebar") {
+          e.preventDefault();
+          open();
+        }
+      };
       list.appendChild(el);
     },
   });
@@ -111,22 +135,34 @@ function openPerson(p) {
   document.getElementById("export-btn").onclick = () => exportPerson(p);
   const back = document.getElementById("back-people");
   back.onclick = () => mountPeople(slug);
-  back.onkeydown = (e) => { if (e.key === "Enter" || e.key === " " || e.key === "Spacebar") { e.preventDefault(); mountPeople(slug); } };
+  back.onkeydown = (e) => {
+    if (e.key === "Enter" || e.key === " " || e.key === "Spacebar") {
+      e.preventDefault();
+      mountPeople(slug);
+    }
+  };
   document.getElementById("rename-btn").onclick = async () => {
     try {
       await post(`/api/p/${slug}/persons/${p.id}/rename`, { name: document.getElementById("rename-input").value });
-      toast("Renamed"); mountPeople(slug);
-    } catch { toast("Could not rename", true); }
+      toast("Renamed");
+      mountPeople(slug);
+    } catch {
+      toast("Could not rename", true);
+    }
   };
   document.getElementById("merge-btn").onclick = () => openMerge(p);
   document.getElementById("split-btn").onclick = () => splitSelected(p);
   const grid = document.getElementById("face-grid");
   infinite({
-    root: null, sentinel: document.getElementById("face-sentinel"),
+    root: null,
+    sentinel: document.getElementById("face-sentinel"),
     fetchPage: (off) => api(`/api/p/${slug}/persons/${p.id}/faces?offset=${off}&limit=100`),
     // header count came from a (possibly stale) grid snapshot; correct it from the
     // authoritative faces total once the first page lands.
-    onPage: (r) => { const el = document.getElementById("person-count"); if (el && r.total != null) el.textContent = r.total; },
+    onPage: (r) => {
+      const el = document.getElementById("person-count");
+      if (el && r.total != null) el.textContent = r.total;
+    },
     renderItem: (f) => {
       const qual = `quality ${pct(f.quality_score)}`;
       const alt = `Face, ${qual}${f.is_best ? ", best of person" : ""}`;
@@ -145,10 +181,18 @@ function openPerson(p) {
         b.textContent = `Split out (${selected.size})`;
         b.classList.toggle("hidden", selected.size === 0);
       };
-      chk.onclick = (e) => { e.stopPropagation(); toggleSel(); };
+      chk.onclick = (e) => {
+        e.stopPropagation();
+        toggleSel();
+      };
       const inspect = () => openFaceModal(slug, f.id);
       cell.onclick = inspect;
-      cell.onkeydown = (e) => { if (e.key === "Enter" || e.key === " " || e.key === "Spacebar") { e.preventDefault(); inspect(); } };
+      cell.onkeydown = (e) => {
+        if (e.key === "Enter" || e.key === " " || e.key === "Spacebar") {
+          e.preventDefault();
+          inspect();
+        }
+      };
       grid.appendChild(cell);
     },
   });
@@ -169,27 +213,36 @@ async function splitSelected(person) {
   if (name == null) return; // cancelled
   try {
     await post(`/api/p/${slug}/persons/${person.id}/split`, { face_ids: [...selected], name: name.trim() || fallback });
-    toast("Split into a new person"); mountPeople(slug);
-  } catch { toast("Could not split", true); }
+    toast("Split into a new person");
+    mountPeople(slug);
+  } catch {
+    toast("Could not split", true);
+  }
 }
 
 async function exportPerson(p) {
   let r;
-  try { r = await post("/api/fs/choose", {}); } catch { return; }
-  if (!r || !r.ok || !r.path) return;   // cancelled
+  try {
+    r = await post("/api/fs/choose", {});
+  } catch {
+    return;
+  }
+  if (!r || !r.ok || !r.path) return; // cancelled
   toast("Copying originals…");
   try {
     const res = await post(`/api/p/${slug}/persons/${p.id}/export`, { dest: r.path });
-    toast(res.ok ? `Copied ${res.count} photos → ${res.dest}` : (res.msg || "export failed"), !res.ok);
-  } catch { toast("Export failed", true); }
+    toast(res.ok ? `Copied ${res.count} photos → ${res.dest}` : res.msg || "export failed", !res.ok);
+  } catch {
+    toast("Export failed", true);
+  }
 }
 
 // faces.js fires this after a reject/extract; refresh the open person in place.
 window.addEventListener("atelier:people-changed", () => {
   if (!currentPerson) return;
   const view = document.getElementById("view-people");
-  if (view && view.classList.contains("hidden")) return;   // not on the People view
-  openPerson(currentPerson);   // re-fetch faces; onPage corrects the count
+  if (view && view.classList.contains("hidden")) return; // not on the People view
+  openPerson(currentPerson); // re-fetch faces; onPage corrects the count
 });
 
 async function openMerge(person) {
@@ -206,44 +259,58 @@ async function openMerge(person) {
       if (r.next_offset == null) break;
       off = r.next_offset;
     }
-  } catch { toast("Could not load people", true); }
+  } catch {
+    toast("Could not load people", true);
+  }
   const listEl = document.getElementById("mg-list");
   const draw = (q) => {
     const ql = q.toLowerCase();
     listEl.innerHTML = "";
-    all.filter((t) => !ql || (t.display_name || `Person ${t.id}`).toLowerCase().includes(ql)).forEach((t) => {
-      const nm = t.display_name || `Person ${t.id}`;
-      const row = document.createElement("div");
-      row.className = "merge-row";
-      row.setAttribute("role", "button");
-      row.setAttribute("tabindex", "0");
-      row.setAttribute("aria-label", `Merge into ${nm}, ${t.cnt} photos`);
-      row.innerHTML = `<img loading="lazy" src="${t.best_face ? `/api/p/${slug}/thumb/${t.best_face}` : ""}" alt="">
+    all
+      .filter((t) => !ql || (t.display_name || `Person ${t.id}`).toLowerCase().includes(ql))
+      .forEach((t) => {
+        const nm = t.display_name || `Person ${t.id}`;
+        const row = document.createElement("div");
+        row.className = "merge-row";
+        row.setAttribute("role", "button");
+        row.setAttribute("tabindex", "0");
+        row.setAttribute("aria-label", `Merge into ${nm}, ${t.cnt} photos`);
+        row.innerHTML = `<img loading="lazy" src="${t.best_face ? `/api/p/${slug}/thumb/${t.best_face}` : ""}" alt="">
         <span>${escapeHtml(nm)}</span><span class="muted">${t.cnt}</span>`;
-      const doMerge = async () => {
-        const fromName = person.display_name || `Person ${person.id}`;
-        const ok = await confirmDialog({
-          title: "Merge people",
-          message: `Merge <b>${escapeHtml(String(person.cnt))}</b> face${person.cnt === 1 ? "" : "s"} of <b>${escapeHtml(fromName)}</b> into <b>${escapeHtml(nm)}</b>?<br><span class="muted">This can’t be undone.</span>`,
-          okLabel: "Merge",
-          danger: true,
-        });
-        if (!ok) return;
-        try {
-          await post(`/api/p/${slug}/persons/merge`, { from_id: person.id, into_id: t.id });
-          document.getElementById("modal-merge").classList.add("hidden");
-          toast(`Merged into ${nm}`); mountPeople(slug);
-        } catch { toast("Could not merge", true); }
-      };
-      row.onclick = doMerge;
-      row.onkeydown = (e) => { if (e.key === "Enter" || e.key === " " || e.key === "Spacebar") { e.preventDefault(); doMerge(); } };
-      listEl.appendChild(row);
-    });
+        const doMerge = async () => {
+          const fromName = person.display_name || `Person ${person.id}`;
+          const ok = await confirmDialog({
+            title: "Merge people",
+            message: `Merge <b>${escapeHtml(String(person.cnt))}</b> face${person.cnt === 1 ? "" : "s"} of <b>${escapeHtml(fromName)}</b> into <b>${escapeHtml(nm)}</b>?<br><span class="muted">This can’t be undone.</span>`,
+            okLabel: "Merge",
+            danger: true,
+          });
+          if (!ok) return;
+          try {
+            await post(`/api/p/${slug}/persons/merge`, { from_id: person.id, into_id: t.id });
+            document.getElementById("modal-merge").classList.add("hidden");
+            toast(`Merged into ${nm}`);
+            mountPeople(slug);
+          } catch {
+            toast("Could not merge", true);
+          }
+        };
+        row.onclick = doMerge;
+        row.onkeydown = (e) => {
+          if (e.key === "Enter" || e.key === " " || e.key === "Spacebar") {
+            e.preventDefault();
+            doMerge();
+          }
+        };
+        listEl.appendChild(row);
+      });
   };
   draw("");
   search.oninput = () => draw(search.value);
 }
-document.getElementById("mg-x").addEventListener("click", () => document.getElementById("modal-merge").classList.add("hidden"));
+document
+  .getElementById("mg-x")
+  .addEventListener("click", () => document.getElementById("modal-merge").classList.add("hidden"));
 document.getElementById("modal-merge").addEventListener("click", (e) => {
   if (e.target.id === "modal-merge") document.getElementById("modal-merge").classList.add("hidden");
 });
@@ -281,25 +348,49 @@ function buildDialog({ title, message, label, value, placeholder, okLabel, cance
 
     okBtn.onclick = accept;
     cancelBtn.onclick = cancel;
-    overlay.addEventListener("click", (e) => { if (e.target === overlay) cancel(); });
+    overlay.addEventListener("click", (e) => {
+      if (e.target === overlay) cancel();
+    });
 
-    const focusable = () => [...box.querySelectorAll(
-      'input,button,[tabindex]:not([tabindex="-1"])')].filter((n) => !n.disabled);
+    const focusable = () =>
+      [...box.querySelectorAll('input,button,[tabindex]:not([tabindex="-1"])')].filter((n) => !n.disabled);
     const onKey = (e) => {
       // capture-phase: stop the global Escape from also closing the modal behind us
-      if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); cancel(); return; }
-      if (e.key === "Enter" && withInput && document.activeElement === input) { e.preventDefault(); accept(); return; }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        cancel();
+        return;
+      }
+      if (e.key === "Enter" && withInput && document.activeElement === input) {
+        e.preventDefault();
+        accept();
+        return;
+      }
       if (e.key !== "Tab") return;
       const items = focusable();
       if (!items.length) return;
-      const first = items[0], last = items[items.length - 1];
-      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
-      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+      const first = items[0],
+        last = items[items.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
     };
     window.addEventListener("keydown", onKey, true);
-    requestAnimationFrame(() => { (withInput ? input : okBtn).focus(); if (withInput) input.select(); });
+    requestAnimationFrame(() => {
+      (withInput ? input : okBtn).focus();
+      if (withInput) input.select();
+    });
   });
 }
 
-function confirmDialog(opts) { return buildDialog({ ...opts, withInput: false }); }
-function promptDialog(opts) { return buildDialog({ ...opts, withInput: true }); }
+function confirmDialog(opts) {
+  return buildDialog({ ...opts, withInput: false });
+}
+function promptDialog(opts) {
+  return buildDialog({ ...opts, withInput: true });
+}

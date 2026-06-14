@@ -1,12 +1,13 @@
 // Projects dashboard with cover mosaics + new-project modal (native folder picker).
-import { api, post, del, escapeHtml, base, toast } from "./api.js";
+import { api, post, del, escapeHtml, toast } from "./api.js";
 
 export async function renderDashboard() {
   const wrap = document.getElementById("project-cards");
   wrap.innerHTML = `<p class="muted">Loading…</p>`;
   let projects;
-  try { projects = await api("/api/projects"); }
-  catch {
+  try {
+    projects = await api("/api/projects");
+  } catch {
     wrap.innerHTML = `<div class="empty"><div class="big">Couldn’t reach the server</div>
       Make sure Atelier is running, then reload.</div>`;
     return;
@@ -20,8 +21,13 @@ export async function renderDashboard() {
   projects.forEach((p, i) => {
     const s = p.stats || {};
     const cover = (p.cover || []).length
-      ? `<div class="cover">${p.cover.slice(0, 5).map((id) =>
-          `<img loading="lazy" src="/api/p/${p.slug}/image_thumb/${id}" alt="Photo from ${escapeHtml(p.name)}">`).join("")}</div>`
+      ? `<div class="cover">${p.cover
+          .slice(0, 5)
+          .map(
+            (id) =>
+              `<img loading="lazy" src="/api/p/${p.slug}/image_thumb/${id}" alt="Photo from ${escapeHtml(p.name)}">`,
+          )
+          .join("")}</div>`
       : `<div class="cover empty">${p.running ? "indexing…" : "no photos yet"}</div>`;
     const card = document.createElement("div");
     card.className = "proj-card";
@@ -41,13 +47,18 @@ export async function renderDashboard() {
           <button class="del">Delete</button>
         </div>
       </div>`;
-    card.onclick = (e) => { if (!e.target.classList.contains("del")) location.hash = `#/p/${p.slug}/review`; };
+    card.onclick = (e) => {
+      if (!e.target.classList.contains("del")) location.hash = `#/p/${p.slug}/review`;
+    };
     card.querySelector(".del").onclick = async (e) => {
       e.stopPropagation();
       if (!confirm(`Delete “${p.name}”? Removes its database only — originals untouched.`)) return;
       let r;
-      try { r = await del(`/api/projects/${p.slug}`); }
-      catch { return toast("Could not delete project", true); }
+      try {
+        r = await del(`/api/projects/${p.slug}`);
+      } catch {
+        return toast("Could not delete project", true);
+      }
       if (!r.ok) return toast(r.msg || "could not delete", true);
       renderDashboard();
     };
@@ -57,12 +68,18 @@ export async function renderDashboard() {
 
 // ---- new project modal ----
 const modal = () => document.getElementById("modal-new");
-const openM = () => { document.getElementById("np-name").value = ""; document.getElementById("np-folder").value = ""; modal().classList.remove("hidden"); };
+const openM = () => {
+  document.getElementById("np-name").value = "";
+  document.getElementById("np-folder").value = "";
+  modal().classList.remove("hidden");
+};
 const closeM = () => modal().classList.add("hidden");
 document.getElementById("new-project-btn").addEventListener("click", openM);
 document.getElementById("np-cancel").addEventListener("click", closeM);
 document.getElementById("np-cancel-x").addEventListener("click", closeM);
-modal().addEventListener("click", (e) => { if (e.target.id === "modal-new") closeM(); });
+modal().addEventListener("click", (e) => {
+  if (e.target.id === "modal-new") closeM();
+});
 document.getElementById("np-choose").addEventListener("click", async () => {
   try {
     const r = await post("/api/fs/choose", {});
@@ -71,7 +88,9 @@ document.getElementById("np-choose").addEventListener("click", async () => {
       toast("Folder picker is macOS-only — type or paste the folder path below", true);
       document.getElementById("np-folder").focus();
     } else if (r.msg && r.msg !== "cancelled") toast(r.msg, true);
-  } catch { toast("Could not open folder picker", true); }
+  } catch {
+    toast("Could not open folder picker", true);
+  }
 });
 document.getElementById("np-create").addEventListener("click", async () => {
   const name = document.getElementById("np-name").value.trim();
@@ -80,8 +99,12 @@ document.getElementById("np-create").addEventListener("click", async () => {
   const btn = document.getElementById("np-create");
   btn.disabled = true;
   let r;
-  try { r = await post("/api/projects", { name, folder }); }
-  catch { btn.disabled = false; return toast("Could not create project", true); }
+  try {
+    r = await post("/api/projects", { name, folder });
+  } catch {
+    btn.disabled = false;
+    return toast("Could not create project", true);
+  }
   btn.disabled = false;
   if (!r.ok) return toast(r.msg || "could not create project", true);
   closeM();

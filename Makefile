@@ -43,6 +43,32 @@ test: ## Run pure-logic unit tests (no models needed)
 check: ## Byte-compile every script (fast syntax check)
 	$(PYTHON) -m py_compile atelier/*.py atelier/pipeline/*.py && echo "✓ all compile"
 
+.PHONY: lint
+lint: ## Lint + format-check Python (ruff)
+	$(PYTHON) -m ruff format --check .
+	$(PYTHON) -m ruff check .
+
+.PHONY: format
+format: ## Auto-format + autofix Python (ruff)
+	$(PYTHON) -m ruff format .
+	$(PYTHON) -m ruff check --fix .
+
+.PHONY: lint-web
+lint-web: ## Lint + format-check the web SPA (needs `npm install`)
+	npx eslint atelier/web
+	npx prettier --check "atelier/web/**/*.{js,css,html}"
+
+.PHONY: format-web
+format-web: ## Auto-format + autofix the web SPA (needs `npm install`)
+	npx eslint --fix atelier/web
+	npx prettier --write "atelier/web/**/*.{js,css,html}"
+
+.PHONY: build
+build: ## Build wheel + sdist into dist/
+	@rm -rf dist
+	$(PYTHON) -m build
+	@echo "✓ built -> dist/"
+
 # ---------------------------------------------------------------- database
 .PHONY: db
 db: ## Create an empty database (DB=faces.db)

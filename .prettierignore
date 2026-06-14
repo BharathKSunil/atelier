@@ -1,0 +1,6 @@
+.venv
+dist
+build
+models
+node_modules
+*.db

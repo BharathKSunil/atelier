@@ -1,7 +1,8 @@
 // Keyboard-driven lightbox (gallery) + face detail modal.
 import { api, post, pct, escapeHtml, base, toast } from "./api.js";
 
-let items = [], idx = 0;
+let items = [],
+  idx = 0;
 
 export function openLightbox(arg, start = 0) {
   items = Array.isArray(arg) ? arg : [{ src: arg }];
@@ -18,13 +19,20 @@ function show() {
   document.getElementById("lb-next").style.display = multi ? "" : "none";
   document.getElementById("lightbox").classList.remove("hidden");
 }
-function move(d) { idx = (idx + d + items.length) % items.length; show(); }
-function close() { document.getElementById("lightbox").classList.add("hidden"); }
+function move(d) {
+  idx = (idx + d + items.length) % items.length;
+  show();
+}
+function close() {
+  document.getElementById("lightbox").classList.add("hidden");
+}
 
 document.getElementById("lb-close").onclick = close;
 document.getElementById("lb-prev").onclick = () => move(-1);
 document.getElementById("lb-next").onclick = () => move(1);
-document.getElementById("lightbox").addEventListener("click", (e) => { if (e.target.id === "lightbox") close(); });
+document.getElementById("lightbox").addEventListener("click", (e) => {
+  if (e.target.id === "lightbox") close();
+});
 window.addEventListener("keydown", (e) => {
   if (document.getElementById("lightbox").classList.contains("hidden")) return;
   // Escape is handled once, globally, by main.js (lightbox first, then modals) so
@@ -44,8 +52,9 @@ export async function openFaceModal(slug, fid) {
   box.innerHTML = `<p class="muted">Loading…</p>`;
   document.getElementById("modal-face").classList.remove("hidden");
   let f;
-  try { f = await api(`/api/p/${slug}/face/${fid}`); }
-  catch {
+  try {
+    f = await api(`/api/p/${slug}/face/${fid}`);
+  } catch {
     box.innerHTML = `<button class="modal-x" id="face-x" aria-label="Close">&times;</button><p class="muted">Could not load this face.</p>`;
     box.querySelector("#face-x").onclick = () => document.getElementById("modal-face").classList.add("hidden");
     return;
@@ -81,13 +90,17 @@ export async function openFaceModal(slug, fid) {
     try {
       const r = await post("/api/fs/reveal", { path: f.path });
       toast(r.ok ? "Revealed in Finder" : "Could not reveal file", !r.ok);
-    } catch { toast("Could not reveal file", true); }
+    } catch {
+      toast("Could not reveal file", true);
+    }
   };
   const npBtn = box.querySelector("#face-notperson");
   if (npBtn) npBtn.onclick = () => notThisPerson(slug, f, closeM);
 }
 
-function peopleChanged() { window.dispatchEvent(new CustomEvent("atelier:people-changed")); }
+function peopleChanged() {
+  window.dispatchEvent(new CustomEvent("atelier:people-changed"));
+}
 
 // "Not this person" -> two choices: extract to a new person, or remove (+ similar review).
 function notThisPerson(slug, f, closeM) {
@@ -101,16 +114,27 @@ function notThisPerson(slug, f, closeM) {
   zone.querySelector("#np-extract").onclick = async () => {
     try {
       await post(`/api/p/${slug}/persons/${f.person_id}/split`, { face_ids: [f.id] });
-      toast("Extracted into a new person"); closeM(); peopleChanged();
-    } catch { toast("Could not extract", true); }
+      toast("Extracted into a new person");
+      closeM();
+      peopleChanged();
+    } catch {
+      toast("Could not extract", true);
+    }
   };
   zone.querySelector("#np-remove").onclick = async () => {
     try {
       await post(`/api/p/${slug}/faces/reject`, { face_ids: [f.id] });
-    } catch { toast("Could not remove", true); return; }
-    const sims = await api(`/api/p/${slug}/faces/${f.id}/similar?person=${f.person_id}&threshold=0.5`)
-      .catch(() => []);
-    if (!sims || !sims.length) { toast("Removed from person"); closeM(); peopleChanged(); return; }
+    } catch {
+      toast("Could not remove", true);
+      return;
+    }
+    const sims = await api(`/api/p/${slug}/faces/${f.id}/similar?person=${f.person_id}&threshold=0.5`).catch(() => []);
+    if (!sims || !sims.length) {
+      toast("Removed from person");
+      closeM();
+      peopleChanged();
+      return;
+    }
     reviewSimilar(slug, sims, closeM);
   };
 }
@@ -121,22 +145,36 @@ function reviewSimilar(slug, sims, closeM) {
   zone.innerHTML = `
     <div class="np-box">
       <p><b>${sims.length}</b> similar face${sims.length > 1 ? "s" : ""} in this person — remove these too?</p>
-      <div class="sim-grid">${sims.map((s) =>
-        `<label class="sim-cell"><input type="checkbox" data-id="${s.id}" ${s.cosine >= 0.6 ? "checked" : ""}>
+      <div class="sim-grid">${sims
+        .map(
+          (s) =>
+            `<label class="sim-cell"><input type="checkbox" data-id="${s.id}" ${s.cosine >= 0.6 ? "checked" : ""}>
            <img loading="lazy" src="/api/p/${slug}/thumb/${s.id}" alt="similar face, ${Math.round(s.cosine * 100)}% alike">
-           <span>${Math.round(s.cosine * 100)}%</span></label>`).join("")}</div>
+           <span>${Math.round(s.cosine * 100)}%</span></label>`,
+        )
+        .join("")}</div>
       <div class="np-actions">
         <button class="btn ghost" id="sim-skip">Keep them</button>
         <button class="btn danger" id="sim-remove">Remove selected</button>
       </div>
     </div>`;
-  zone.querySelector("#sim-skip").onclick = () => { toast("Removed 1 face"); closeM(); peopleChanged(); };
+  zone.querySelector("#sim-skip").onclick = () => {
+    toast("Removed 1 face");
+    closeM();
+    peopleChanged();
+  };
   zone.querySelector("#sim-remove").onclick = async () => {
     const ids = [...zone.querySelectorAll(".sim-cell input:checked")].map((c) => +c.dataset.id);
     if (ids.length) {
-      try { await post(`/api/p/${slug}/faces/reject`, { face_ids: ids }); } catch { toast("Could not remove", true); }
+      try {
+        await post(`/api/p/${slug}/faces/reject`, { face_ids: ids });
+      } catch {
+        toast("Could not remove", true);
+      }
     }
-    toast(`Removed ${ids.length + 1} faces`); closeM(); peopleChanged();
+    toast(`Removed ${ids.length + 1} faces`);
+    closeM();
+    peopleChanged();
   };
 }
 document.getElementById("modal-face").addEventListener("click", (e) => {

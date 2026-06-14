@@ -17,8 +17,24 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-      - run: pip install -r requirements-dev.txt ruff
-      - run: ruff check .
+      - run: pip install -r requirements-dev.txt
       - run: pytest -q
       - name: smoke-import server + create app
         run: python -c "import tempfile; from atelier.server import create_app; create_app(tempfile.mkdtemp())"
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install ruff
+      - run: ruff format --check .
+      - run: ruff check .
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: npm ci
+      - run: npx eslint atelier/web
+      - run: npx prettier --check "atelier/web/**/*.{js,css,html}"

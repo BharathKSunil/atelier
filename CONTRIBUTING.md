@@ -20,12 +20,36 @@ to run the pipeline end to end.
 
 ## Checks
 
+Python (covered by `make install-dev`):
+
 ```bash
-ruff check . && pytest -q
+make lint    # ruff format --check + ruff check
+make test    # pytest -q
+make format  # auto-fix: ruff format + ruff check --fix
 ```
 
-Both run in CI (`.github/workflows/ci.yml`). Please make sure they pass locally
-before opening a PR.
+Web SPA (needs Node — run `npm install` once):
+
+```bash
+make lint-web    # eslint + prettier --check
+make format-web  # eslint --fix + prettier --write
+```
+
+Optional git hooks (auto-runs ruff + ruff-format on commit):
+
+```bash
+pre-commit install
+```
+
+Everything above runs in CI (`.github/workflows/ci.yml`) — a `test` matrix over
+{ubuntu, macOS} × {3.11, 3.12} and a single `lint` job. Please make sure the
+checks pass locally before opening a PR.
+
+## Building
+
+```bash
+make build   # python -m build -> wheel + sdist in dist/
+```
 
 ## Conventions
 
@@ -34,7 +58,9 @@ before opening a PR.
   This keeps the pure modules (`quality`, `series`, `db`, `imaging`, `config`)
   importable with only numpy/Pillow, so the math stays unit-testable without
   pulling in gigabytes of deps. Don't add a top-level `import torch`.
-- **Lint:** ruff, line-length **120**. Run `ruff check .` (or `ruff check --fix .`).
+- **Formatting is tool-enforced.** Python: `ruff format` + `ruff check` (line-length
+  **120**). Web: Prettier (`printWidth` 120) + ESLint flat config (browser ESM).
+  Run `make format` / `make format-web` before committing — don't hand-format.
 - **Tests** live in `tests/`. Prefer testing pure logic; if a test would need
   models or a GPU, gate it or mock the heavy import.
 - **Comments** explain *why*, not *what*. Skip docstrings on obvious functions.
