@@ -158,6 +158,7 @@ ruff check . && pytest -q  # lint + tests (also run in CI: .github/workflows/ci.
 - 5-point face alignment before embedding (needs re-index + opencv; A/B since vggface2 trained on unaligned crops).
 - Externalizing thumbnails to disk (DB-size diet at 100k faces).
 - Per-project tunables surfaced in the UI; a learned aesthetic model (current `aesthetic` pick is a colorfulness+exposure+sharpness heuristic, not a trained model).
+- DOM virtualization for very large grids. The People grid (~hundreds) and per-person face grid paginate and lazy-load but accumulate nodes on infinite scroll; a windowing/recycling pass is deferred. The print list paginates server-side, so the heaviest grid (thousands of starred keepers) no longer renders all at once.
 
 ## Architecture notes
 

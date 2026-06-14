@@ -140,7 +140,10 @@ def create_app(projects_dir):
         default = (request.json or {}).get("default")
         path = fsdialog.choose_folder(default)
         if not path:
-            return jsonify(ok=False, msg="cancelled or unavailable"), 200
+            unavailable = not fsdialog.available()
+            msg = ("native folder picker is macOS-only — type or paste the folder path"
+                   if unavailable else "cancelled")
+            return jsonify(ok=False, msg=msg, unavailable=unavailable), 200
         return jsonify(ok=True, path=path, exists=os.path.isdir(path))
 
     @app.post("/api/fs/reveal")
@@ -485,11 +488,15 @@ def create_app(projects_dir):
     @app.get("/api/p/<slug>/prints")
     def prints(slug):
         _require(slug)
-        rows = _conn(slug).execute(
+        c = _conn(slug)
+        offset, limit = _page()
+        total = c.execute("SELECT COUNT(*) FROM picks WHERE pick_type='print'").fetchone()[0]
+        rows = c.execute(
             """SELECT i.id, i.path, i.series_id, i.print_score
                FROM picks p JOIN images i ON i.id=p.image_id
-               WHERE p.pick_type='print' ORDER BY i.series_id, i.id""").fetchall()
-        return jsonify([dict(r) for r in rows])
+               WHERE p.pick_type='print' ORDER BY i.series_id, i.id LIMIT ? OFFSET ?""",
+            (limit, offset)).fetchall()
+        return _paged([dict(r) for r in rows], total, offset, limit)
 
     @app.post("/api/p/<slug>/prints/export")
     def export_prints(slug):

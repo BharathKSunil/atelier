@@ -124,14 +124,18 @@ def _silhouette(X, labels):
 
 
 def _merge_by_centroid(X, labels, cos_threshold):
-    """Union clusters whose L2-normalized centroids have cosine > threshold."""
+    """Union clusters whose L2-normalized centroids have cosine >= threshold.
+
+    The pairwise cosine is one BLAS matmul (C @ C.T) over the centroids; the union
+    loop then touches only the above-threshold pairs. The old O(clusters^2) Python
+    double-loop of np.dot calls hung at a few thousand clusters.
+    """
     uniq = sorted(set(int(l) for l in labels) - {-1})
     if len(uniq) < 2:
         return labels
-    cents = {}
-    for lab in uniq:
-        c = X[labels == lab].mean(axis=0)
-        cents[lab] = c / (np.linalg.norm(c) + 1e-9)
+    C = np.stack([X[labels == lab].mean(axis=0) for lab in uniq])
+    C = C / (np.linalg.norm(C, axis=1, keepdims=True) + 1e-9)
+    sim = C @ C.T                                   # full pairwise cosine, vectorized
     parent = {lab: lab for lab in uniq}
 
     def find(x):
@@ -140,11 +144,10 @@ def _merge_by_centroid(X, labels, cos_threshold):
             x = parent[x]
         return x
 
-    for i in range(len(uniq)):
-        for j in range(i + 1, len(uniq)):
-            a, b = uniq[i], uniq[j]
-            if float(np.dot(cents[a], cents[b])) >= cos_threshold:
-                parent[find(a)] = find(b)
+    ai, bj = np.triu_indices(len(uniq), k=1)         # upper triangle only (excl. diagonal)
+    hits = np.nonzero(sim[ai, bj] >= cos_threshold)[0]
+    for p in hits:
+        parent[find(uniq[ai[p]])] = find(uniq[bj[p]])
     return np.array([find(int(l)) if l >= 0 else -1 for l in labels])
 
 

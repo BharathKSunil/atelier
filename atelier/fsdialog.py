@@ -1,6 +1,13 @@
 """Native macOS filesystem helpers (osascript / open). Degrade gracefully off macOS."""
 import os
+import shutil
 import subprocess
+import sys
+
+
+def available():
+    """True only where the native 'choose folder' dialog can actually run."""
+    return sys.platform == "darwin" and shutil.which("osascript") is not None
 
 
 def choose_folder(default=None):

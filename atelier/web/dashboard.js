@@ -67,7 +67,10 @@ document.getElementById("np-choose").addEventListener("click", async () => {
   try {
     const r = await post("/api/fs/choose", {});
     if (r.ok) document.getElementById("np-folder").value = r.path;
-    else if (r.msg && r.msg !== "cancelled or unavailable") toast(r.msg, true);
+    else if (r.unavailable) {
+      toast("Folder picker is macOS-only — type or paste the folder path below", true);
+      document.getElementById("np-folder").focus();
+    } else if (r.msg && r.msg !== "cancelled") toast(r.msg, true);
   } catch { toast("Could not open folder picker", true); }
 });
 document.getElementById("np-create").addEventListener("click", async () => {
