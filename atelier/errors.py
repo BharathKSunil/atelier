@@ -9,9 +9,5 @@ class AtelierError(Exception):
     """Base class for all Atelier-specific errors."""
 
 
-class PhaseError(AtelierError):
-    """A pipeline phase failed (non-zero exit, missing input, etc.)."""
-
-
 class DatabaseError(AtelierError):
     """A database operation failed, with added context about what was attempted."""

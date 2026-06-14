@@ -42,7 +42,6 @@ export async function mountReview(s) {
   if (!series.length) {
     document.getElementById("rv-stage").innerHTML =
       `<div class="empty-stage">No multi-frame bursts to review.</div>`;
-    document.getElementById("rv-rail").innerHTML = "";
     document.getElementById("rv-strip").innerHTML = "";
     document.getElementById("rv-count").textContent = "—";
     return;

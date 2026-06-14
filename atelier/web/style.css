@@ -108,7 +108,6 @@ h1, h2, h3 { font-family: var(--serif); font-weight: 500; letter-spacing: -0.01e
   font-size: 13px; padding: 7px 16px; border-radius: 999px; cursor: pointer; transition: .15s; }
 .mode.active { background: var(--raised); color: var(--ink); box-shadow: inset 0 0 0 1px var(--line); }
 .mode:hover:not(.active) { color: var(--ink); }
-.mode .n { color: var(--gold); font-variant-numeric: tabular-nums; margin-left: 5px; }
 
 /* ---------- screens ---------- */
 .screen { min-height: calc(100vh - 65px); }
@@ -148,7 +147,6 @@ h1, h2, h3 { font-family: var(--serif); font-weight: 500; letter-spacing: -0.01e
 .rev-bar .progress { flex: 1; height: 4px; background: var(--line-soft); border-radius: 999px; overflow: hidden; }
 .rev-bar .progress > i { display: block; height: 100%; background: linear-gradient(90deg, var(--accent), var(--gold)); }
 .rev-bar .count { font-family: var(--serif); font-size: 15px; color: var(--ink); white-space: nowrap; }
-.rev-bar .nav { display: flex; gap: 8px; }
 
 .stage { background: var(--stage); display: flex; align-items: center; justify-content: center;
   position: relative; overflow: hidden; padding: 28px; }
@@ -157,17 +155,6 @@ h1, h2, h3 { font-family: var(--serif); font-weight: 500; letter-spacing: -0.01e
 .stage .starred-tag { position: absolute; top: 22px; left: 22px; background: var(--gold); color: var(--stage);
   font-weight: 700; font-size: 12px; padding: 6px 14px; border-radius: 999px; letter-spacing: .04em; }
 .stage .empty-stage { color: var(--faint); font-family: var(--serif); font-style: italic; font-size: 18px; }
-
-/* criteria rail */
-.rail { grid-column: 2; grid-row: 2; border-left: 1px solid var(--line-soft); padding: 24px; overflow-y: auto; background: var(--panel); }
-.rail .eyebrow { display: block; margin-bottom: 14px; }
-.crit { border: 1px solid var(--line-soft); border-radius: 12px; padding: 14px; margin-bottom: 12px; cursor: pointer; transition: .15s; background: #1a150f; }
-.crit:hover { border-color: var(--gold-soft); }
-.crit.is { border-color: var(--gold); box-shadow: inset 0 0 0 1px var(--gold-soft); }
-.crit h4 { font-family: var(--serif); font-size: 16px; margin-bottom: 3px; }
-.crit p { color: var(--muted); font-size: 12px; margin: 0; }
-.crit .tag { float: right; font-size: 10px; color: var(--gold); text-transform: uppercase; letter-spacing: .1em; }
-.rail .star-cta { width: 100%; margin-top: 8px; }
 
 /* filmstrip — criteria + print tags live on the frames; suggested frames sort first */
 .strip { border-top: 1px solid var(--line-soft); background: var(--panel);

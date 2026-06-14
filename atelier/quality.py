@@ -15,16 +15,14 @@ def laplacian_var(gray):
     return float(lap.var())
 
 
-def norm_sharpness(var, cap=None):
-    cap = config.SHARPNESS_CAP if cap is None else cap
-    return float(np.clip(var / cap, 0.0, 1.0))
+def norm_sharpness(var):
+    return float(np.clip(var / config.SHARPNESS_CAP, 0.0, 1.0))
 
 
-def squash_sharpness(var, k=None):
+def squash_sharpness(var):
     """Monotone 1 - exp(-var/k). Unlike the hard cap, this keeps discriminating at
     the high end (every in-focus photo no longer saturates to 1.0)."""
-    k = config.SHARPNESS_SQUASH_K if k is None else k
-    return float(1.0 - np.exp(-max(0.0, var) / k))
+    return float(1.0 - np.exp(-max(0.0, var) / config.SHARPNESS_SQUASH_K))
 
 
 def colorfulness(rgb):

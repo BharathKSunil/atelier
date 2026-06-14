@@ -30,20 +30,6 @@ export async function api(p, o) {
 export const post = (p, b) => api(p, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(b || {}) });
 export const del = (p) => api(p, { method: "DELETE" });
 
-// Retry idempotent GETs up to 2x with 400ms backoff. Never used for mutating verbs.
-export async function getRetry(p, o) {
-  let last;
-  for (let attempt = 0; attempt < 3; attempt++) {
-    try {
-      return await api(p, o);
-    } catch (e) {
-      last = e;
-      if (attempt < 2) await new Promise((r) => setTimeout(r, 400));
-    }
-  }
-  throw last;
-}
-
 export const pct = (v) => (v == null ? "–" : Math.round(v * 100) + "%");
 export const base = (p) => String(p || "").split("/").pop();
 export function escapeHtml(s) {

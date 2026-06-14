@@ -73,7 +73,7 @@ function focusableIn(el) {
 // Trap state per modal id so re-entrancy / multiple modals are safe.
 const traps = new Map();
 
-export function trapFocus(modal) {
+function trapFocus(modal) {
   if (!modal || traps.has(modal)) return;
   const box = modal.querySelector(".modal-box") || modal;
   const prev = document.activeElement;
@@ -99,7 +99,7 @@ export function trapFocus(modal) {
   });
 }
 
-export function releaseFocus(modal) {
+function releaseFocus(modal) {
   const t = traps.get(modal);
   if (!t) return;
   modal.removeEventListener("keydown", t.onKeydown);
