@@ -42,6 +42,14 @@ def merge_persons(conn, from_pid, into_pid, name=None):
     if name is None:
         row = conn.execute("SELECT display_name FROM persons WHERE id=?", (into_pid,)).fetchone()
         name = row["display_name"] if row else None
+    # Re-key any override group from_pid's faces already belong to (e.g. from a
+    # prior merge) onto gk. Otherwise faces that drifted to noise or a third
+    # merged-in person keep the stale group_key and re-materialize a separate
+    # person on the next re-cluster — the merge silently reverts.
+    for old_gk in _group_keys_of_person(conn, from_pid):
+        if old_gk != gk:
+            conn.execute("UPDATE person_overrides SET group_key=?, display_name=? WHERE group_key=?",
+                         (gk, name, old_gk))
     _write_rows(conn, faces, gk, "merge", name)
     conn.execute("UPDATE faces SET person_id=? WHERE person_id=?", (into_pid, from_pid))
     conn.execute("DELETE FROM persons WHERE id=?", (from_pid,))

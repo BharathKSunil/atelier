@@ -57,7 +57,8 @@ export function unmountReview() {
 
 async function load() {
   const sid = series[pos].id;
-  [frames, picks] = await Promise.all([
+  const mySlug = slug, myPos = pos;   // snapshot: a different project/burst may mount mid-fetch
+  const [fr, pk] = await Promise.all([
     api(`/api/p/${slug}/series/${sid}/images`),
     api(`/api/p/${slug}/series/${sid}/picks`).then((d) => {
       const m = {};
@@ -65,6 +66,9 @@ async function load() {
       return m;
     }),
   ]);
+  if (slug !== mySlug || pos !== myPos) return;   // navigated away — don't render stale data
+  frames = fr;
+  picks = pk;
   heroId = (picks.group && picks.group.image_id) || (frames[0] && frames[0].id);
   // Freeze the filmstrip order ONCE per burst (suggested/starred first). Starring
   // later must not reorder — that's what was bouncing you back to the start.

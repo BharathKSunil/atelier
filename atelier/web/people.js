@@ -11,7 +11,7 @@ let searchTimer = null;
 
 function killObs() { observers.forEach((o) => o.disconnect()); observers = []; }
 
-function infinite({ root, sentinel, fetchPage, renderItem }) {
+function infinite({ root, sentinel, fetchPage, renderItem, onPage }) {
   let offset = 0, busy = false, done = false;
   async function more() {
     if (busy || done) return;
@@ -19,6 +19,7 @@ function infinite({ root, sentinel, fetchPage, renderItem }) {
     let r;
     try { r = await fetchPage(offset); }
     catch { busy = false; toast("Could not load list", true); return; }
+    if (onPage) onPage(r, offset);
     (r.items || []).forEach(renderItem);
     if (r.next_offset == null) { done = true; sentinel.remove(); } else offset = r.next_offset;
     busy = false;
@@ -32,6 +33,7 @@ function infinite({ root, sentinel, fetchPage, renderItem }) {
 export function mountPeople(s) {
   slug = s;
   query = "";
+  currentPerson = null;   // leaving detail view — stale snapshot must not outlive it
   renderPeople();
 }
 
@@ -103,7 +105,7 @@ function openPerson(p) {
       <button class="btn ghost" id="merge-btn">Merge into…</button>
       <button class="btn ghost" id="export-btn">Export photos…</button>
       <button class="btn danger hidden" id="split-btn">Split out (0)</button>
-      <span class="muted" style="margin-left:auto">${p.cnt} photos · tick to merge/split · click to inspect</span>
+      <span class="muted" style="margin-left:auto"><span id="person-count">${p.cnt}</span> photos · tick to merge/split · click to inspect</span>
     </div>
     <div class="grid" id="face-grid"></div><div class="sentinel" id="face-sentinel"></div>`;
   document.getElementById("export-btn").onclick = () => exportPerson(p);
@@ -122,6 +124,9 @@ function openPerson(p) {
   infinite({
     root: null, sentinel: document.getElementById("face-sentinel"),
     fetchPage: (off) => api(`/api/p/${slug}/persons/${p.id}/faces?offset=${off}&limit=100`),
+    // header count came from a (possibly stale) grid snapshot; correct it from the
+    // authoritative faces total once the first page lands.
+    onPage: (r) => { const el = document.getElementById("person-count"); if (el && r.total != null) el.textContent = r.total; },
     renderItem: (f) => {
       const qual = `quality ${pct(f.quality_score)}`;
       const alt = `Face, ${qual}${f.is_best ? ", best of person" : ""}`;
@@ -181,7 +186,10 @@ async function exportPerson(p) {
 
 // faces.js fires this after a reject/extract; refresh the open person in place.
 window.addEventListener("atelier:people-changed", () => {
-  if (currentPerson) openPerson(currentPerson);
+  if (!currentPerson) return;
+  const view = document.getElementById("view-people");
+  if (view && view.classList.contains("hidden")) return;   // not on the People view
+  openPerson(currentPerson);   // re-fetch faces; onPage corrects the count
 });
 
 async function openMerge(person) {

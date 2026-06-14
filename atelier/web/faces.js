@@ -27,8 +27,9 @@ document.getElementById("lb-next").onclick = () => move(1);
 document.getElementById("lightbox").addEventListener("click", (e) => { if (e.target.id === "lightbox") close(); });
 window.addEventListener("keydown", (e) => {
   if (document.getElementById("lightbox").classList.contains("hidden")) return;
-  if (e.key === "Escape") close();
-  else if (e.key === "ArrowLeft") move(-1);
+  // Escape is handled once, globally, by main.js (lightbox first, then modals) so
+  // a single press doesn't close the lightbox AND a modal behind it.
+  if (e.key === "ArrowLeft") move(-1);
   else if (e.key === "ArrowRight") move(1);
 });
 
