@@ -1,4 +1,4 @@
-"""Lazy model loaders. Heavy imports (torch, facenet) live inside functions so
+"""Lazy model loaders. Heavy imports (torch, insightface) live inside functions so
 the pure modules (quality, series, db, imaging) stay importable without them."""
 import os
 
@@ -10,8 +10,6 @@ import numpy as np
 
 from . import config
 
-_mtcnn = None
-_resnet = None
 _dino = None
 _insight = None
 
@@ -26,28 +24,6 @@ def get_device():
     if torch.cuda.is_available():
         return "cuda"
     return "cpu"
-
-
-def mtcnn(device):
-    # MTCNN's adaptive pooling isn't implemented for non-divisible inputs on Apple
-    # MPS (pytorch #96056), so detection always runs on CPU. It's a small net —
-    # cheap on CPU — while the heavy embeddings (Resnet, DINOv2) stay on the GPU.
-    global _mtcnn
-    if _mtcnn is None:
-        from facenet_pytorch import MTCNN
-        _mtcnn = MTCNN(
-            keep_all=True, device="cpu", post_process=False,
-            min_face_size=config.MTCNN_MIN_FACE, thresholds=config.MTCNN_THRESHOLDS,
-        )
-    return _mtcnn
-
-
-def resnet(device):
-    global _resnet
-    if _resnet is None:
-        from facenet_pytorch import InceptionResnetV1
-        _resnet = InceptionResnetV1(pretrained="vggface2").eval().to(device)
-    return _resnet
 
 
 def dino(device):
@@ -89,64 +65,31 @@ def insight_app():
 
 
 def detect_and_embed(pil_img, device):
-    """Backend-agnostic detection + identity embedding.
+    """Detection + identity embedding (insightface SCRFD + ArcFace, or AdaFace).
 
     Returns a list of {bbox:(x1,y1,x2,y2) in pil_img coords, score:float,
     embedding:np.float32[512] (L2-normalized)}.
     """
-    if config.FACE_BACKEND == "insightface":
-        app = insight_app()
-        bgr = np.ascontiguousarray(np.asarray(pil_img)[:, :, ::-1])   # RGB->BGR
-        faces = app.get(bgr)
-        if config.RECOGNITION_MODEL == "adaface":
-            # Keep SCRFD detection + its 5-pt landmarks, but re-align each face with the
-            # standard ArcFace similarity transform and embed it with AdaFace IR-101.
-            from insightface.utils.face_align import norm_crop
+    app = insight_app()
+    bgr = np.ascontiguousarray(np.asarray(pil_img)[:, :, ::-1])   # RGB->BGR
+    faces = app.get(bgr)
+    if config.RECOGNITION_MODEL == "adaface":
+        # Keep SCRFD detection + its 5-pt landmarks, but re-align each face with the
+        # standard ArcFace similarity transform and embed it with AdaFace IR-101.
+        from insightface.utils.face_align import norm_crop
 
-            from . import recognition
-            embedder = recognition.get_embedder(device)
-            return [{"bbox": tuple(float(v) for v in f.bbox),
-                     "score": float(f.det_score),
-                     "embedding": embedder.embed_aligned(norm_crop(bgr, f.kps)),
-                     "kps": np.asarray(f.kps, dtype=np.float64)}
-                    for f in faces]
+        from . import recognition
+        embedder = recognition.get_embedder(device)
         return [{"bbox": tuple(float(v) for v in f.bbox),
                  "score": float(f.det_score),
-                 "embedding": f.normed_embedding.astype(np.float32),
-                 "kps": np.asarray(f.kps, dtype=np.float64)}   # 5 pts: eyes, nose, mouth
+                 "embedding": embedder.embed_aligned(norm_crop(bgr, f.kps)),
+                 "kps": np.asarray(f.kps, dtype=np.float64)}
                 for f in faces]
-    # legacy MTCNN + FaceNet
-    boxes, probs, _ = detect_faces(pil_img, device)
-    if boxes is None or len(boxes) == 0:
-        return []
-    embs = embed_faces(pil_img, boxes, device)
-    embs = embs / (np.linalg.norm(embs, axis=1, keepdims=True) + 1e-9)
-    return [{"bbox": tuple(float(v) for v in b),
-             "score": float(probs[i]) if probs[i] is not None else 0.0,
-             "embedding": embs[i].astype(np.float32), "kps": None}
-            for i, b in enumerate(boxes)]
-
-
-def detect_faces(img, device):
-    """Return (boxes, probs, landmarks) on a PIL image. Any may be None if no faces."""
-    return mtcnn(device).detect(img, landmarks=True)
-
-
-def embed_faces(img, boxes, device):
-    """(N,512) float32 identity embeddings for given boxes on PIL img."""
-    import torch
-    from facenet_pytorch import extract_face
-    if boxes is None or len(boxes) == 0:
-        return np.zeros((0, 512), dtype=np.float32)
-    r = resnet(device)
-    crops = []
-    for b in boxes:
-        face = extract_face(img, b, image_size=160)   # 3x160x160, 0..255
-        crops.append((face - 127.5) / 128.0)
-    batch = torch.stack(crops).to(device)
-    with torch.no_grad():
-        emb = r(batch).cpu().numpy().astype(np.float32)
-    return emb
+    return [{"bbox": tuple(float(v) for v in f.bbox),
+             "score": float(f.det_score),
+             "embedding": f.normed_embedding.astype(np.float32),
+             "kps": np.asarray(f.kps, dtype=np.float64)}   # 5 pts: eyes, nose, mouth
+            for f in faces]
 
 
 def embed_global(img, device):

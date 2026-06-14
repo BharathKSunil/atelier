@@ -117,13 +117,13 @@ Re-cluster persons or regroup series anytime by re-running phase 2 / 2b — the 
 
 ### Face engine (detection + recognition)
 
-Default backend is **insightface** — RetinaFace detection + ArcFace embeddings (`buffalo_l`, auto-downloads). This fixes the two failure modes of the old MTCNN+FaceNet stack:
+Atelier uses **insightface** — SCRFD/RetinaFace detection + ArcFace embeddings (`buffalo_l`, auto-downloads). It avoids the two failure modes of the older MTCNN+FaceNet approach:
 - **False positives** (jewelry, hands, hair, skin tagged as people) — rejected by the detector confidence gate `FACE_DET_THRESHOLD` (0.65).
 - **Junk/duplicate clusters** — ArcFace separates identities far better (same-person cosine ~0.98 vs different ~0.15; FaceNet gave ~0.51), so HDBSCAN over-splits and false-merges much less.
 
-Index-time gates in `atelier/config.py`: `FACE_DET_THRESHOLD`, `FACE_MIN_PX`, `FACE_MIN_SHARPNESS`. Set `FACE_BACKEND="mtcnn"` to fall back.
+Index-time gates in `atelier/config.py`: `FACE_DET_THRESHOLD`, `FACE_MIN_PX`, `FACE_MIN_SHARPNESS`. The recognition model is selectable (`RECOGNITION_MODEL = "arcface"` default, or `"adaface"`).
 
-> **Switching backend requires a full re-index** — embeddings live in a different space:
+> **Switching `RECOGNITION_MODEL` requires a full re-index** — ArcFace and AdaFace embeddings live in different spaces:
 > ```bash
 > make reindex PHOTOS=/path/to/photos DB=projects/<slug>.db   # or delete the DB and re-run the pipeline
 > make cluster DB=projects/<slug>.db
@@ -162,7 +162,7 @@ ruff check . && pytest -q  # lint + tests (also run in CI: .github/workflows/ci.
 
 ## Architecture notes
 
-- `atelier/` holds all logic. Heavy imports (torch, facenet, mediapipe) are **lazy** — pure modules (`quality`, `series`, `db`, `imaging`) import with numpy/Pillow only, so the math is unit-testable without GBs of deps.
+- `atelier/` holds all logic. Heavy imports (torch, insightface, mediapipe) are **lazy** — pure modules (`quality`, `series`, `db`, `imaging`) import with numpy/Pillow only, so the math is unit-testable without GBs of deps.
 - **I/O bound, not GPU bound:** reading ~400 GB once dominates. External drives are the real bottleneck.
 - **Sharpness measured on full-res** (Phase 1, while the file is open) — downscaled sharpness is unreliable for detecting motion blur.
 - **Print score is group-aware:** `min(eye_open)` over all faces, so one person blinking sinks a group shot. Formula + weights in `atelier/config.py` and `atelier/quality.py`.

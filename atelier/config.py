@@ -21,11 +21,9 @@ ANALYSIS_LONG_EDGE = 1536   # downscale long edge for detection + global embeddi
 THUMB_MAX = 256             # stored face thumbnail max edge (px)
 IMAGE_THUMB_MAX = 360       # stored per-image thumbnail max edge (px) — avoids re-decoding originals
 
-# --- Face detection / recognition backend ---
-# "insightface" = RetinaFace detector + ArcFace embeddings (buffalo_l) — far fewer
-# false positives (jewelry/skin/blur) and much better clustering than MTCNN+FaceNet.
-# "mtcnn" = legacy facenet-pytorch fallback.
-FACE_BACKEND = "insightface"
+# --- Face detection ---
+# insightface: SCRFD/RetinaFace detector + ArcFace embeddings (buffalo_l) — far fewer
+# false positives (jewelry/skin/blur) and far better clustering than the old MTCNN+FaceNet.
 INSIGHTFACE_MODEL = "buffalo_l"
 INSIGHTFACE_DET_SIZE = 640   # SCRFD standard; larger can MISS frame-filling faces
 
@@ -51,10 +49,6 @@ FACE_MIN_PX = 32            # min bbox side in the analysis image (drops tiny ba
 FACE_MIN_SHARPNESS = 0.12   # min squashed sharpness (drops out-of-focus blobs)
 FACE_MIN_FRONTALITY = 0.35  # min frontality from detector keypoints (drops profiles/ears
                             # whose embeddings are unreliable and pollute clusters)
-
-# legacy MTCNN params (only used when FACE_BACKEND == "mtcnn")
-MTCNN_MIN_FACE = 40
-MTCNN_THRESHOLDS = [0.6, 0.7, 0.7]
 
 # --- Identity clustering (HDBSCAN over 512-d face embeddings) ---
 HDBSCAN_MIN_CLUSTER = 5

@@ -40,7 +40,6 @@ dependencies = [
     "scikit-learn>=1.3",
     "tqdm>=4.66",
     "flask>=3.0",
-    "facenet-pytorch>=2.5.3",
 ]
 
 [project.urls]
