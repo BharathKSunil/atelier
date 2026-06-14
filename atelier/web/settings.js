@@ -68,8 +68,11 @@ function groupCard(group) {
 
 function knob(k) {
   const v = values[k.key] != null ? values[k.key] : k.default;
+  const help = k.help
+    ? `<span class="help" tabindex="0" role="note" aria-label="${escapeHtml(k.label)}: ${escapeHtml(k.help)}">?<span class="help-balloon">${escapeHtml(k.help)}</span></span>`
+    : "";
   return `<div class="knob">
-    <label>${escapeHtml(k.label)}</label>
+    <label><span>${escapeHtml(k.label)}</span>${help}</label>
     <input type="range" data-k="${k.key}" min="${k.min}" max="${k.max}" step="${k.step}" value="${v}">
     <input type="number" data-k="${k.key}" min="${k.min}" max="${k.max}" step="${k.step}" value="${v}">
   </div>`;
