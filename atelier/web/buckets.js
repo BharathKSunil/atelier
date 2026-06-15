@@ -18,6 +18,69 @@ export function unmountBuckets() {
   stopObs();
 }
 
+// Modal bucket picker (used from People to add photos by face). Resolves a bucket id, or null.
+export async function chooseBucket(slugArg) {
+  let list;
+  try {
+    list = await api(`/api/p/${slugArg}/buckets`);
+  } catch {
+    list = [];
+  }
+  return new Promise((resolve) => {
+    const prev = document.activeElement;
+    const overlay = document.createElement("div");
+    overlay.className = "modal";
+    const rows = list
+      .map(
+        (b) =>
+          `<button class="bucket-pick" data-id="${b.id}"><span class="dot" style="background:${escapeHtml(b.color || "#cda35c")}"></span><span class="nm">${escapeHtml(b.name)}</span><em>${b.count}</em></button>`,
+      )
+      .join("");
+    overlay.innerHTML = `<div class="modal-box" role="dialog" aria-modal="true" tabindex="-1" style="width:420px">
+      <h3>Add to bucket</h3>
+      <div class="bucket-pick-list">${rows || `<p class="muted">No buckets yet — create one below.</p>`}</div>
+      <div class="modal-actions">
+        <button class="btn ghost" data-act="cancel">Cancel</button>
+        <button class="btn" data-act="new">+ New bucket</button>
+      </div></div>`;
+    document.body.appendChild(overlay);
+    const close = (val) => {
+      window.removeEventListener("keydown", onKey, true);
+      overlay.remove();
+      if (prev && typeof prev.focus === "function" && document.contains(prev)) prev.focus();
+      resolve(val);
+    };
+    const onKey = (e) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        close(null);
+      }
+    };
+    window.addEventListener("keydown", onKey, true);
+    overlay.addEventListener("click", (e) => {
+      if (e.target === overlay) close(null);
+    });
+    overlay.querySelector('[data-act="cancel"]').onclick = () => close(null);
+    overlay.querySelectorAll(".bucket-pick").forEach((el) => {
+      el.onclick = () => close(+el.dataset.id);
+    });
+    overlay.querySelector('[data-act="new"]').onclick = async () => {
+      const name = (
+        await promptDialog({ title: "New bucket", label: "Bucket name", placeholder: "e.g. Family", okLabel: "Create" })
+      )?.trim();
+      if (!name) return;
+      try {
+        const r = await post(`/api/p/${slugArg}/buckets`, { name });
+        close(r.id);
+      } catch {
+        toast("Could not create bucket", true);
+      }
+    };
+    requestAnimationFrame(() => overlay.querySelector(".modal-box").focus());
+  });
+}
+
 function stopObs() {
   if (obs) {
     obs.disconnect();

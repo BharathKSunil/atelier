@@ -117,3 +117,26 @@ def test_buckets_crud_toggle_and_membership(app, client, tmp_path):
     assert client.get("/api/p/demo/buckets").get_json()[0]["count"] == 1
     client.delete(f"/api/p/demo/buckets/{bid}", headers=h)
     assert client.get("/api/p/demo/buckets").get_json() == []
+
+
+def test_bucket_add_people_unions_their_photos(app, client, tmp_path):
+    pdir = str(tmp_path / "projects")
+    projects.register_existing(pdir, "demo", str(tmp_path))
+    c = db.connect(projects.db_path(pdir, "demo"))
+    for i in (1, 2, 3):
+        c.execute("INSERT INTO images(id, path, processed) VALUES(?,?,1)", (i, f"/p{i}.jpg"))
+    # person 1 -> images 1,2 ; person 2 -> images 2,3 (image 2 shared)
+    c.executemany(
+        "INSERT INTO faces(id, image_id, person_id) VALUES(?,?,?)",
+        [(1, 1, 1), (2, 2, 1), (3, 2, 2), (4, 3, 2)],
+    )
+    c.commit()
+    c.close()
+    h = {"X-Atelier-Token": _token(client)}
+    bid = client.post("/api/p/demo/buckets", json={"name": "Family"}, headers=h).get_json()["id"]
+    r = client.post(f"/api/p/demo/buckets/{bid}/add-people", json={"person_ids": [1]}, headers=h).get_json()
+    assert r["added"] == 2  # person 1 is in images 1 and 2
+    client.post(f"/api/p/demo/buckets/{bid}/add-people", json={"person_ids": [2]}, headers=h)  # adds image 3
+    assert client.get(f"/api/p/demo/buckets/{bid}/images").get_json()["total"] == 3  # union, deduped
+    bad = client.post("/api/p/demo/buckets/999/add-people", json={"person_ids": [1]}, headers=h)
+    assert bad.status_code == 404

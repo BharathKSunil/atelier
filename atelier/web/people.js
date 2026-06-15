@@ -2,6 +2,7 @@
 import { api, post, pct, escapeHtml, toast } from "./api.js";
 import { openFaceModal } from "./faces.js";
 import { confirmDialog, promptDialog } from "./dialog.js";
+import { chooseBucket } from "./buckets.js";
 
 let slug = null;
 let observers = [];
@@ -69,6 +70,7 @@ function renderPeople() {
     <div class="select-bar hidden" id="ppl-bar">
       <span id="ppl-bar-n">0 selected</span>
       <button class="btn ghost" id="ppl-bar-clear">Clear</button>
+      <button class="btn ghost" id="ppl-bar-bucket">Add to bucket…</button>
       <button class="btn" id="ppl-bar-export">Export photos…</button>
     </div>`;
 
@@ -83,12 +85,28 @@ function renderPeople() {
     }, 200);
   };
   document.getElementById("ppl-bar-export").onclick = exportSelectedPeople;
+  document.getElementById("ppl-bar-bucket").onclick = addSelectedToBucket;
   document.getElementById("ppl-bar-clear").onclick = () => {
     gridSel.clear();
     loadGrid();
     updateExportBar();
   };
   loadGrid();
+}
+
+async function addSelectedToBucket() {
+  if (!gridSel.size) return;
+  const bid = await chooseBucket(slug);
+  if (bid == null) return;
+  try {
+    const r = await post(`/api/p/${slug}/buckets/${bid}/add-people`, { person_ids: [...gridSel] });
+    const np = gridSel.size;
+    toast(
+      `Added ${r.added} photo${r.added === 1 ? "" : "s"} from ${np} ${np === 1 ? "person" : "people"} to the bucket`,
+    );
+  } catch {
+    toast("Could not add to bucket", true);
+  }
 }
 
 function updateExportBar() {
@@ -185,12 +203,14 @@ function openPerson(p) {
       <input class="name" id="rename-input" value="${escapeHtml(name)}">
       <button class="btn ghost" id="rename-btn">Save</button>
       <button class="btn ghost" id="merge-btn">Merge into…</button>
+      <button class="btn ghost" id="bucket-btn">Add to bucket…</button>
       <button class="btn ghost" id="export-btn">Export photos…</button>
       <button class="btn danger hidden" id="split-btn">Split out (0)</button>
       <span class="muted" style="margin-left:auto"><span id="person-count">${p.cnt}</span> photos · tick to merge/split · click to inspect</span>
     </div>
     <div class="grid" id="face-grid"></div><div class="sentinel" id="face-sentinel"></div>`;
   document.getElementById("export-btn").onclick = () => exportPerson(p);
+  document.getElementById("bucket-btn").onclick = () => addPersonToBucket(p);
   const back = document.getElementById("back-people");
   back.onclick = () => mountPeople(slug);
   back.onkeydown = (e) => {
@@ -292,6 +312,17 @@ async function exportPerson(p) {
     toast(res.ok ? `Copied ${res.count} photos → ${res.dest}` : res.msg || "export failed", !res.ok);
   } catch {
     toast("Export failed", true);
+  }
+}
+
+async function addPersonToBucket(p) {
+  const bid = await chooseBucket(slug);
+  if (bid == null) return;
+  try {
+    const r = await post(`/api/p/${slug}/buckets/${bid}/add-people`, { person_ids: [p.id] });
+    toast(`Added ${r.added} photo${r.added === 1 ? "" : "s"} to the bucket`);
+  } catch {
+    toast("Could not add to bucket", true);
   }
 }
 

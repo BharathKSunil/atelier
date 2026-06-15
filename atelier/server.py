@@ -524,6 +524,28 @@ def create_app(projects_dir):
         c.commit()
         return jsonify(ok=True, added=len(ids))
 
+    @app.post("/api/p/<slug>/buckets/<int:bid>/add-people")
+    def bucket_add_people(slug, bid):
+        """Add every photo the given people appear in to the bucket (by face)."""
+        _require(slug)
+        pids = [int(x) for x in ((request.json or {}).get("person_ids") or [])]
+        if not pids:
+            return jsonify(ok=False, msg="no people selected"), 400
+        c = _conn(slug)
+        if not c.execute("SELECT 1 FROM buckets WHERE id=?", (bid,)).fetchone():
+            return jsonify(ok=False, msg="no such bucket"), 404
+        ph = ",".join("?" * len(pids))
+        img_ids = [
+            r["image_id"] for r in c.execute(f"SELECT DISTINCT image_id FROM faces WHERE person_id IN ({ph})", pids)
+        ]
+        now = time.time()
+        c.executemany(
+            "INSERT OR IGNORE INTO bucket_items(bucket_id, image_id, added_at) VALUES(?,?,?)",
+            [(bid, i, now) for i in img_ids],
+        )
+        c.commit()
+        return jsonify(ok=True, added=len(img_ids))
+
     @app.get("/api/p/<slug>/buckets/for-images")
     def buckets_for_images(slug):
         _require(slug)
