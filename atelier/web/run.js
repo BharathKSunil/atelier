@@ -7,11 +7,13 @@ let slug = null;
 let paused = false;
 let es = null; // log EventSource
 let lastSeq = 0; // highest log line seq seen (cursor)
+let lastFaceKey = ""; // last rendered live-face-grid id set (skip no-op rebuilds)
 
 export function mountRun(s) {
   slug = s;
   paused = false;
   lastSeq = 0;
+  lastFaceKey = "";
   const logEl = document.getElementById("run-log");
   if (logEl) logEl.textContent = "";
 
@@ -263,7 +265,11 @@ function render(s) {
   document.getElementById("run-again").classList.toggle("hidden", s.running);
 
   document.getElementById("live-face-count").textContent = s.faces_found || 0;
-  document.getElementById("live-face-grid").innerHTML = (s.recent_face_ids || [])
-    .map((id) => `<img loading="lazy" src="/api/p/${slug}/thumb/${id}" alt="Recently detected face">`)
-    .join("");
+  const faceKey = (s.recent_face_ids || []).join(",");
+  if (faceKey !== lastFaceKey) {
+    lastFaceKey = faceKey;
+    document.getElementById("live-face-grid").innerHTML = (s.recent_face_ids || [])
+      .map((id) => `<img loading="lazy" src="/api/p/${slug}/thumb/${id}" alt="Recently detected face">`)
+      .join("");
+  }
 }

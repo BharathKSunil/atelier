@@ -129,19 +129,19 @@ def _silhouette(X, labels):
         return "n/a"
 
 
-def _merge_by_centroid(X, labels, cos_threshold):
+def _merge_by_centroid(X, labels, cos_threshold, block=512):
     """Union clusters whose L2-normalized centroids have cosine >= threshold.
 
-    The pairwise cosine is one BLAS matmul (C @ C.T) over the centroids; the union
-    loop then touches only the above-threshold pairs. The old O(clusters^2) Python
-    double-loop of np.dot calls hung at a few thousand clusters.
+    Cosine is computed in BLAS row-blocks (block x K) and only the j>i pairs above
+    threshold drive unions — so peak memory is O(block * K), not the full K x K
+    matrix (which would be GB-scale at tens of thousands of clusters).
     """
     uniq = sorted(set(int(l) for l in labels) - {-1})
-    if len(uniq) < 2:
+    k = len(uniq)
+    if k < 2:
         return labels
     C = np.stack([X[labels == lab].mean(axis=0) for lab in uniq])
     C = C / (np.linalg.norm(C, axis=1, keepdims=True) + 1e-9)
-    sim = C @ C.T  # full pairwise cosine, vectorized
     parent = {lab: lab for lab in uniq}
 
     def find(x):
@@ -150,10 +150,15 @@ def _merge_by_centroid(X, labels, cos_threshold):
             x = parent[x]
         return x
 
-    ai, bj = np.triu_indices(len(uniq), k=1)  # upper triangle only (excl. diagonal)
-    hits = np.nonzero(sim[ai, bj] >= cos_threshold)[0]
-    for p in hits:
-        parent[find(uniq[ai[p]])] = find(uniq[bj[p]])
+    for i0 in range(0, k, block):
+        i1 = min(i0 + block, k)
+        sim = C[i0:i1] @ C.T  # (block, K)
+        rows, cols = np.nonzero(sim >= cos_threshold)
+        for r, col in zip(rows, cols, strict=True):
+            i = i0 + int(r)
+            j = int(col)
+            if j > i:  # upper triangle only — excludes the diagonal and mirror pairs
+                parent[find(uniq[i])] = find(uniq[j])
     return np.array([find(int(l)) if l >= 0 else -1 for l in labels])
 
 

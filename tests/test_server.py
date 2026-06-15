@@ -155,3 +155,20 @@ def test_bucket_toggle_validates_bucket_and_image_id(app, client, tmp_path):
     bid = client.post("/api/p/demo/buckets", json={"name": "B"}, headers=h).get_json()["id"]
     bad = client.post(f"/api/p/demo/buckets/{bid}/toggle", json={"image_id": "x"}, headers=h)
     assert bad.status_code == 400  # non-numeric image_id -> 400, not a 500 ValueError
+
+
+def test_bucket_delete_cascades_items(app, client, tmp_path):
+    pdir = str(tmp_path / "projects")
+    projects.register_existing(pdir, "demo", str(tmp_path))
+    c = db.connect(projects.db_path(pdir, "demo"))
+    c.execute("INSERT INTO images(id, path, processed) VALUES(1, '/p1.jpg', 1)")
+    c.commit()
+    c.close()
+    h = {"X-Atelier-Token": _token(client)}
+    bid = client.post("/api/p/demo/buckets", json={"name": "B"}, headers=h).get_json()["id"]
+    client.post(f"/api/p/demo/buckets/{bid}/toggle", json={"image_id": 1}, headers=h)
+    client.delete(f"/api/p/demo/buckets/{bid}", headers=h)
+    c = db.connect(projects.db_path(pdir, "demo"))
+    left = c.execute("SELECT COUNT(*) FROM bucket_items WHERE bucket_id=?", (bid,)).fetchone()[0]
+    c.close()
+    assert left == 0  # ON DELETE CASCADE removed the membership rows

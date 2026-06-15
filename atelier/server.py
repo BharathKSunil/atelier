@@ -8,6 +8,7 @@ per project.
 """
 
 import argparse
+import contextlib
 import io
 import json
 import os
@@ -21,6 +22,7 @@ from flask import (
     Flask,
     Response,
     abort,
+    g,
     jsonify,
     request,
     send_file,
@@ -118,7 +120,20 @@ def create_app(projects_dir):
         return proj
 
     def _conn(slug):
-        return db.connect(projects.db_path(projects_dir, slug))
+        # one connection per (request, slug), closed at request teardown — avoids
+        # fd churn and the redundant PRAGMA/migration check on every call.
+        cache = g._conns if "_conns" in g else None
+        if cache is None:
+            cache = g._conns = {}
+        if slug not in cache:
+            cache[slug] = db.connect(projects.db_path(projects_dir, slug))
+        return cache[slug]
+
+    @app.teardown_appcontext
+    def _close_conns(_exc):
+        for c in getattr(g, "_conns", {}).values():
+            with contextlib.suppress(Exception):
+                c.close()
 
     def _runner(slug):
         return get_runner(
@@ -196,7 +211,6 @@ def create_app(projects_dir):
                 ]
                 if not item["cover"]:
                     item["cover"] = [r[0] for r in c.execute("SELECT id FROM images WHERE processed=1 LIMIT 5")]
-                c.close()
             except Exception:
                 pass
             out.append(item)
@@ -492,7 +506,7 @@ def create_app(projects_dir):
     def bucket_delete(slug, bid):
         _require(slug)
         c = _conn(slug)
-        c.execute("DELETE FROM bucket_items WHERE bucket_id=?", (bid,))
+        # bucket_items rows are removed by ON DELETE CASCADE (foreign_keys=ON).
         c.execute("DELETE FROM buckets WHERE id=?", (bid,))
         c.commit()
         return jsonify(ok=True)

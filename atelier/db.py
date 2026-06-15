@@ -177,6 +177,14 @@ MIGRATIONS = [
             "CREATE INDEX IF NOT EXISTS idx_bucket_items_image ON bucket_items(image_id)",
         ],
     ),
+    # v8 — index the bucket-browse sort (WHERE bucket_id=? ORDER BY added_at DESC, image_id)
+    # so paging a large bucket doesn't filesort the whole membership each page.
+    (
+        8,
+        [
+            "CREATE INDEX IF NOT EXISTS idx_bucket_items_bucket_added ON bucket_items(bucket_id, added_at, image_id)",
+        ],
+    ),
 ]
 
 SCHEMA_VERSION = MIGRATIONS[-1][0] if MIGRATIONS else 0
