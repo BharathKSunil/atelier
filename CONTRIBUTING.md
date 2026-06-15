@@ -54,7 +54,7 @@ make build   # python -m build -> wheel + sdist in dist/
   pulling in gigabytes of deps. Don't add a top-level `import torch`.
 - **Formatting is tool-enforced.** Python: `ruff format` + `ruff check` (line-length
   **120**). Web: Prettier (`printWidth` 120) + ESLint flat config (browser ESM).
-  Run `make format` / `make format-web` before committing — don't hand-format.
+  Run `make format` before committing (it covers both Python and the web) — don't hand-format.
 - **Tests** live in `tests/`. Prefer testing pure logic; if a test would need
   models or a GPU, gate it or mock the heavy import.
 - **Comments** explain *why*, not *what*. Skip docstrings on obvious functions.

@@ -1,5 +1,5 @@
 # Python hooks run for every committer (no Node needed). Web lint/format
-# (eslint + prettier) is enforced in CI and via `make lint-web` / `make format-web`.
+# (eslint + prettier) is enforced in CI and via `make lint` / `make format`.
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.6.9

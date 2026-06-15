@@ -177,7 +177,9 @@ class Runner:
             )
         self.reconcile()
         self._record_run_start(self.run_id, folder, [p[0] for p in self._phases], self._log_file)
-        threading.Thread(target=self._run, args=(folder,), daemon=True).start()
+        # pass the run's identity + log handle as locals so a back-to-back run that
+        # swaps self.run_id/self._fh can't make this thread's finally clobber them.
+        threading.Thread(target=self._run, args=(folder, self.run_id, self._fh, self._log_file), daemon=True).start()
         return True, "started"
 
     def cancel(self):
@@ -213,11 +215,18 @@ class Runner:
             except OSError:
                 self._fh = None
 
-    def _run(self, folder):
+    def _run(self, folder, run_id, fh, log_file):
         threading.Thread(target=self._watch, daemon=True).start()
         status = "done"
         try:
             for name, module, build_args in self._phases:
+                with self.lock:
+                    stop = self._cancelled
+                if stop:
+                    # cancelled in the gap before this phase spawned — don't start it
+                    status = "cancelled"
+                    self._set_error("run stopped — phase stalled" if self._stalled else "run stopped", None)
+                    break
                 with self.lock:
                     self.state["phase"] = name
                 self._log(f"=== phase: {name} ===")
@@ -262,8 +271,9 @@ class Runner:
             err = self.state.get("error")
             with self.lock:
                 self.state.update(running=False, phase=None, finished_at=time.time())
-            self._record_run_end(self.run_id, status, err)
-            self._close_log()
+            self._record_run_end(run_id, status, err)
+            self._prune_runs()
+            self._close_log(fh, log_file)
             self._event.set()
 
     def _watch(self):
@@ -307,13 +317,15 @@ class Runner:
                     self._fh.write(time.strftime("%H:%M:%S ", time.localtime(ts)) + msg + "\n")
         self._event.set()
 
-    def _close_log(self):
-        with self.lock:
-            fh, src = self._fh, self._log_file
-            self._fh = None
+    def _close_log(self, fh, src):
         if fh:
             with contextlib.suppress(OSError):
                 fh.close()
+        # only release the shared handle if a back-to-back run hasn't swapped in a new one
+        with self.lock:
+            if self._fh is fh:
+                self._fh = None
+                self._log_file = None
         # mirror the latest run to <slug>/run.log for back-compat / quick tailing
         if src and self.log_path and os.path.abspath(src) != os.path.abspath(self.log_path):
             with contextlib.suppress(OSError):
@@ -322,11 +334,30 @@ class Runner:
     def _record_run_start(self, run_id, folder, phases, log_file):
         try:
             c = db.connect(self.db_path)
+            # plain INSERT (not OR REPLACE): a clock step-back that collides with an
+            # existing id raises IntegrityError (caught) rather than clobbering history.
             c.execute(
-                """INSERT OR REPLACE INTO runs(id, started_at, finished_at, status, phases, error, log_file)
+                """INSERT INTO runs(id, started_at, finished_at, status, phases, error, log_file)
                    VALUES(?,?,?,?,?,?,?)""",
                 (run_id, time.time(), None, "running", ",".join(phases), None, log_file or ""),
             )
+            c.commit()
+            c.close()
+        except Exception:
+            pass
+
+    def _prune_runs(self, keep=50):
+        """Keep only the most recent `keep` runs; delete older rows + their per-run
+        log files (never the mirrored run.log)."""
+        try:
+            c = db.connect(self.db_path)
+            old = c.execute("SELECT id, log_file FROM runs ORDER BY id DESC LIMIT -1 OFFSET ?", (keep,)).fetchall()
+            for r in old:
+                lf = r["log_file"]
+                if lf and (not self.log_path or os.path.abspath(lf) != os.path.abspath(self.log_path)):
+                    with contextlib.suppress(OSError):
+                        os.remove(lf)
+                c.execute("DELETE FROM runs WHERE id=?", (r["id"],))
             c.commit()
             c.close()
         except Exception:

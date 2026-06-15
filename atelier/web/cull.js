@@ -86,8 +86,9 @@ async function load() {
   });
   const featured = (f) => byImg[f.id] || f.is_print;
   displayFrames = [...frames.filter(featured), ...frames.filter((f) => !featured(f))];
-  // which buckets each frame is already in (for the strip highlight + frame dots)
   imgBuckets = {};
+  render(); // paint the photo + strip immediately — don't block on the membership round-trip
+  // then fetch which buckets each frame is in and re-render to add the coloured dots
   const ids = frames.map((f) => f.id).join(",");
   if (ids && buckets.length) {
     const mem = await api(`/api/p/${slug}/buckets/for-images?ids=${ids}`).catch(() => ({}));
@@ -95,8 +96,8 @@ async function load() {
     Object.entries(mem).forEach(([iid, arr]) => {
       imgBuckets[+iid] = new Set(arr);
     });
+    render();
   }
-  render();
 }
 
 function hero() {

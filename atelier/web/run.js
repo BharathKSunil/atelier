@@ -51,7 +51,12 @@ export function mountRun(s) {
         stopStream();
         clearTimeout(timer);
         timer = null;
-      } else start();
+      } else {
+        // resume without re-seeding: the log + lastSeq are intact, so don't full-replace
+        // the console and yank a scrolled-up reader to the bottom — just reconnect.
+        openStream();
+        poll();
+      }
     };
   }
   start();

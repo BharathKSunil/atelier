@@ -140,3 +140,18 @@ def test_bucket_add_people_unions_their_photos(app, client, tmp_path):
     assert client.get(f"/api/p/demo/buckets/{bid}/images").get_json()["total"] == 3  # union, deduped
     bad = client.post("/api/p/demo/buckets/999/add-people", json={"person_ids": [1]}, headers=h)
     assert bad.status_code == 404
+
+
+def test_bucket_toggle_validates_bucket_and_image_id(app, client, tmp_path):
+    pdir = str(tmp_path / "projects")
+    projects.register_existing(pdir, "demo", str(tmp_path))
+    c = db.connect(projects.db_path(pdir, "demo"))
+    c.execute("INSERT INTO images(id, path, processed) VALUES(1, '/p1.jpg', 1)")
+    c.commit()
+    c.close()
+    h = {"X-Atelier-Token": _token(client)}
+    stale = client.post("/api/p/demo/buckets/999/toggle", json={"image_id": 1}, headers=h)
+    assert stale.status_code == 404  # nonexistent bucket -> clean 404, not a 500 FK error
+    bid = client.post("/api/p/demo/buckets", json={"name": "B"}, headers=h).get_json()["id"]
+    bad = client.post(f"/api/p/demo/buckets/{bid}/toggle", json={"image_id": "x"}, headers=h)
+    assert bad.status_code == 400  # non-numeric image_id -> 400, not a 500 ValueError

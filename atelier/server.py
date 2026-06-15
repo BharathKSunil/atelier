@@ -37,7 +37,29 @@ WEB_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web")
 # Loopback hostnames the server will answer to. The app is unauthenticated by
 # design (single local user); these checks keep a stray LAN bind or a drive-by
 # cross-origin page from reaching the API.
-LOCAL_HOSTS = {"127.0.0.1", "localhost", "::1", ""}
+LOCAL_HOSTS = {"127.0.0.1", "localhost", "::1"}
+
+
+def _copy_unique(paths, dest):
+    """Copy each existing source into dest, de-duping colliding basenames so two
+    sources that share a filename don't silently overwrite. Returns the count copied."""
+    used = set()
+    n = 0
+    for p in paths:
+        if not os.path.exists(p):
+            continue
+        stem, ext = os.path.splitext(os.path.basename(p))
+        name, i = stem + ext, 1
+        while name in used or os.path.exists(os.path.join(dest, name)):
+            name = f"{stem}_{i}{ext}"
+            i += 1
+        used.add(name)
+        try:
+            shutil.copy2(p, os.path.join(dest, name))
+            n += 1
+        except OSError:
+            pass
+    return n
 
 
 def create_app(projects_dir):
@@ -389,14 +411,7 @@ def create_app(projects_dir):
             )
         ]
         os.makedirs(dest, exist_ok=True)
-        n = 0
-        for p in paths:
-            if os.path.exists(p):
-                try:
-                    shutil.copy2(p, os.path.join(dest, os.path.basename(p)))
-                    n += 1
-                except OSError:
-                    pass
+        n = _copy_unique(paths, dest)
         return jsonify(ok=True, count=n, total=len(paths), dest=dest)
 
     @app.post("/api/p/<slug>/persons/export")
@@ -422,14 +437,7 @@ def create_app(projects_dir):
             )
         ]
         os.makedirs(dest, exist_ok=True)
-        n = 0
-        for p in paths:
-            if os.path.exists(p):
-                try:
-                    shutil.copy2(p, os.path.join(dest, os.path.basename(p)))
-                    n += 1
-                except OSError:
-                    pass
+        n = _copy_unique(paths, dest)
         return jsonify(ok=True, count=n, total=len(paths), dest=dest)
 
     # ----- buckets (user-defined collections; an image can be in many) -----
@@ -489,21 +497,30 @@ def create_app(projects_dir):
         c.commit()
         return jsonify(ok=True)
 
+    def _bucket_count(c, bid):
+        return c.execute("SELECT COUNT(*) FROM bucket_items WHERE bucket_id=?", (bid,)).fetchone()[0]
+
+    def _bucket_exists(c, bid):
+        return c.execute("SELECT 1 FROM buckets WHERE id=?", (bid,)).fetchone() is not None
+
     @app.post("/api/p/<slug>/buckets/<int:bid>/toggle")
     def bucket_toggle(slug, bid):
         _require(slug)
-        iid = (request.json or {}).get("image_id")
-        if iid is None:
+        try:
+            iid = int((request.json or {}).get("image_id"))
+        except (TypeError, ValueError):
             return jsonify(ok=False, msg="need image_id"), 400
         c = _conn(slug)
-        exists = c.execute("SELECT 1 FROM bucket_items WHERE bucket_id=? AND image_id=?", (bid, int(iid))).fetchone()
+        if not _bucket_exists(c, bid):
+            return jsonify(ok=False, msg="no such bucket"), 404
+        exists = c.execute("SELECT 1 FROM bucket_items WHERE bucket_id=? AND image_id=?", (bid, iid)).fetchone()
         if exists:
-            c.execute("DELETE FROM bucket_items WHERE bucket_id=? AND image_id=?", (bid, int(iid)))
+            c.execute("DELETE FROM bucket_items WHERE bucket_id=? AND image_id=?", (bid, iid))
             inb = False
         else:
             c.execute(
                 "INSERT OR IGNORE INTO bucket_items(bucket_id, image_id, added_at) VALUES(?,?,?)",
-                (bid, int(iid), time.time()),
+                (bid, iid, time.time()),
             )
             inb = True
         c.commit()
@@ -512,17 +529,23 @@ def create_app(projects_dir):
     @app.post("/api/p/<slug>/buckets/<int:bid>/add")
     def bucket_add_many(slug, bid):
         _require(slug)
-        ids = [int(x) for x in ((request.json or {}).get("image_ids") or [])]
+        try:
+            ids = [int(x) for x in ((request.json or {}).get("image_ids") or [])]
+        except (TypeError, ValueError):
+            return jsonify(ok=False, msg="bad image_ids"), 400
         if not ids:
             return jsonify(ok=False, msg="no images"), 400
         c = _conn(slug)
+        if not _bucket_exists(c, bid):
+            return jsonify(ok=False, msg="no such bucket"), 404
+        before = _bucket_count(c, bid)
         now = time.time()
         c.executemany(
             "INSERT OR IGNORE INTO bucket_items(bucket_id, image_id, added_at) VALUES(?,?,?)",
             [(bid, i, now) for i in ids],
         )
         c.commit()
-        return jsonify(ok=True, added=len(ids))
+        return jsonify(ok=True, added=_bucket_count(c, bid) - before)
 
     @app.post("/api/p/<slug>/buckets/<int:bid>/add-people")
     def bucket_add_people(slug, bid):
@@ -532,19 +555,20 @@ def create_app(projects_dir):
         if not pids:
             return jsonify(ok=False, msg="no people selected"), 400
         c = _conn(slug)
-        if not c.execute("SELECT 1 FROM buckets WHERE id=?", (bid,)).fetchone():
+        if not _bucket_exists(c, bid):
             return jsonify(ok=False, msg="no such bucket"), 404
         ph = ",".join("?" * len(pids))
         img_ids = [
             r["image_id"] for r in c.execute(f"SELECT DISTINCT image_id FROM faces WHERE person_id IN ({ph})", pids)
         ]
+        before = _bucket_count(c, bid)
         now = time.time()
         c.executemany(
             "INSERT OR IGNORE INTO bucket_items(bucket_id, image_id, added_at) VALUES(?,?,?)",
             [(bid, i, now) for i in img_ids],
         )
         c.commit()
-        return jsonify(ok=True, added=len(img_ids))
+        return jsonify(ok=True, added=_bucket_count(c, bid) - before)
 
     @app.get("/api/p/<slug>/buckets/for-images")
     def buckets_for_images(slug):
@@ -587,14 +611,7 @@ def create_app(projects_dir):
             )
         ]
         os.makedirs(dest, exist_ok=True)
-        n = 0
-        for p in paths:
-            if os.path.exists(p):
-                try:
-                    shutil.copy2(p, os.path.join(dest, os.path.basename(p)))
-                    n += 1
-                except OSError:
-                    pass
+        n = _copy_unique(paths, dest)
         return jsonify(ok=True, count=n, total=len(paths), dest=dest)
 
     # ----- series -----
@@ -745,11 +762,7 @@ def create_app(projects_dir):
             .fetchall()
         )
         os.makedirs(dest, exist_ok=True)
-        n = 0
-        for r in rows:
-            if os.path.exists(r["path"]):
-                shutil.copy2(r["path"], os.path.join(dest, os.path.basename(r["path"])))
-                n += 1
+        n = _copy_unique([r["path"] for r in rows], dest)
         return jsonify(ok=True, count=n, dest=dest)
 
     # ----- face detail -----
@@ -777,7 +790,9 @@ def create_app(projects_dir):
         r = _conn(slug).execute("SELECT thumbnail FROM faces WHERE id=?", (fid,)).fetchone()
         if not r or not r["thumbnail"]:
             abort(404)
-        return send_file(io.BytesIO(r["thumbnail"]), mimetype="image/jpeg")
+        resp = send_file(io.BytesIO(r["thumbnail"]), mimetype="image/jpeg")
+        resp.headers["Cache-Control"] = "public, max-age=86400"  # immutable face crop; avoid refetch
+        return resp
 
     @app.get("/api/p/<slug>/image_thumb/<int:iid>")
     def image_thumb(slug, iid):
