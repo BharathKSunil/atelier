@@ -1,6 +1,7 @@
 // Buckets: user-defined collections (a photo can be in many). Manage + browse + export.
 import { api, post, del, escapeHtml, base, toast } from "./api.js";
 import { openLightbox } from "./faces.js";
+import { confirmDialog, promptDialog } from "./dialog.js";
 
 let slug = null;
 let buckets = [];
@@ -63,7 +64,13 @@ function render() {
 }
 
 async function newBucket() {
-  const name = (prompt("New bucket name (e.g. Social media, Candids, For keeps, Private)") || "").trim();
+  const raw = await promptDialog({
+    title: "New bucket",
+    label: "Bucket name",
+    placeholder: "e.g. Social media, Candids, For keeps, Private",
+    okLabel: "Create",
+  });
+  const name = (raw || "").trim();
   if (!name) return;
   try {
     const r = await post(`/api/p/${slug}/buckets`, { name });
@@ -118,7 +125,13 @@ async function saveBucket(id) {
 }
 
 async function deleteBucket(b) {
-  if (!confirm(`Delete bucket “${b.name}”? Your photos stay in the library — only this bucket is removed.`)) return;
+  const ok = await confirmDialog({
+    title: "Delete bucket",
+    message: `Delete <b>${escapeHtml(b.name)}</b>? Your photos stay in the library — only this bucket is removed.`,
+    okLabel: "Delete",
+    danger: true,
+  });
+  if (!ok) return;
   try {
     await del(`/api/p/${slug}/buckets/${b.id}`);
     toast("Bucket deleted");

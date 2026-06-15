@@ -1,5 +1,6 @@
 // Per-project tunables. Grouped knobs; each group saves + triggers the right re-run.
 import { api, post, escapeHtml, toast } from "./api.js";
+import { confirmDialog } from "./dialog.js";
 
 const GROUP_ACTION = {
   Detection: { affects: "reindex", label: "Save & re-index (full)", note: "re-detects every photo — slow" },
@@ -98,7 +99,15 @@ async function saveOnly() {
 async function applyGroup(group) {
   const act = GROUP_ACTION[group];
   // A full re-index re-detects every photo — gate it behind an explicit confirm.
-  if (act && act.affects === "reindex" && !confirm("Re-index all photos? This can take a while.")) return;
+  if (act && act.affects === "reindex") {
+    const ok = await confirmDialog({
+      title: "Re-index all photos?",
+      message: "This re-detects every photo and can take a while.",
+      okLabel: "Re-index",
+      danger: true,
+    });
+    if (!ok) return;
+  }
   try {
     await putValues();
   } catch {

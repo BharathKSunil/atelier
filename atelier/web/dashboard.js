@@ -1,5 +1,6 @@
 // Projects dashboard with cover mosaics + new-project modal (native folder picker).
 import { api, post, del, escapeHtml, toast } from "./api.js";
+import { confirmDialog } from "./dialog.js";
 
 export async function renderDashboard() {
   const wrap = document.getElementById("project-cards");
@@ -52,7 +53,13 @@ export async function renderDashboard() {
     };
     card.querySelector(".del").onclick = async (e) => {
       e.stopPropagation();
-      if (!confirm(`Delete “${p.name}”? Removes its database only — originals untouched.`)) return;
+      const ok = await confirmDialog({
+        title: "Delete project",
+        message: `Delete <b>${escapeHtml(p.name)}</b>? Removes its database only — your original photos are untouched.`,
+        okLabel: "Delete",
+        danger: true,
+      });
+      if (!ok) return;
       let r;
       try {
         r = await del(`/api/projects/${p.slug}`);
