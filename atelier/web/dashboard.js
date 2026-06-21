@@ -19,29 +19,30 @@ const FR_BRACKETS = `<svg class="fr-brackets" viewBox="0 0 64 64" fill="none" ar
 
 function firstRunHero() {
   const cells = FR_STEPS.map(
-    (st, i) => `<figure class="fr-cell${st.keeper ? " keeper" : ""}" style="--d:${i * 90}ms">
+    (st, i) => `<figure class="fr-cell${st.keeper ? " keeper" : ""}" style="--d:${260 + i * 90}ms">
       <div class="fr-frame">${st.keeper ? `${FR_BRACKETS}<span class="fr-dot"></span>` : ""}<span class="fr-no">0${i + 1}</span></div>
       <figcaption><b>${escapeHtml(st.t)}</b><span>${escapeHtml(st.s)}</span></figcaption>
     </figure>`,
   ).join("");
   return `<section class="firstrun">
-    <div class="eyebrow fr-rise" style="--d:0ms">A blank sheet, ready to develop</div>
-    <h1 class="fr-head fr-rise" style="--d:60ms">Twenty thousand frames.<br />One afternoon to the <em>keepers</em>.</h1>
-    <p class="fr-sub fr-rise" style="--d:120ms">
-      Atelier indexes a folder of photos, learns every face, gathers each burst back into the moment it
-      came from, and surfaces the one frame worth keeping — so you cull by saying <em>yes</em>, not by scrolling.
-    </p>
+    <div class="fr-copy">
+      <div class="eyebrow fr-rise" style="--d:0ms">A blank sheet, ready to develop</div>
+      <h1 class="fr-head fr-rise" style="--d:60ms">Twenty thousand frames.<br />One afternoon to the <em>keepers</em>.</h1>
+      <p class="fr-sub fr-rise" style="--d:120ms">
+        Atelier indexes a folder of photos, learns every face, gathers each burst back into the moment it
+        came from, and surfaces the one frame worth keeping — so you cull by saying <em>yes</em>, not by scrolling.
+      </p>
+      <div class="fr-actions fr-rise" style="--d:180ms">
+        <button class="btn fr-primary">+ Develop your first sheet</button>
+        <button class="btn ghost fr-import">Import an existing library →</button>
+      </div>
+      <p class="fr-trust fr-rise" style="--d:240ms">Originals are never touched · everything runs on this machine.</p>
+    </div>
     <div class="fr-sheet fr-rise" style="--d:200ms" aria-hidden="true">
       <div class="fr-rail"></div>
       <div class="fr-cells">${cells}</div>
       <div class="fr-rail"></div>
-      <div class="fr-ticks">01 · 02 · 03 · ●</div>
     </div>
-    <div class="fr-actions fr-rise" style="--d:320ms">
-      <button class="btn fr-primary">+ Develop your first sheet</button>
-      <button class="btn ghost fr-import">Import an existing library →</button>
-    </div>
-    <p class="fr-trust fr-rise" style="--d:380ms">Originals are never touched · everything runs on this machine.</p>
   </section>`;
 }
 
@@ -56,6 +57,7 @@ export async function renderDashboard() {
       Make sure Atelier is running, then reload.</div>`;
     return;
   }
+  wrap.classList.remove("landing"); // card grid by default; the first-run hero opts out
   const archivedCount = projects.filter((p) => p.archived).length;
   const archBtn = document.getElementById("show-archived-btn");
   if (archBtn) {
@@ -65,6 +67,7 @@ export async function renderDashboard() {
   }
   const visible = projects.filter((p) => (showArchived ? p.archived : !p.archived));
   if (!projects.length) {
+    wrap.classList.add("landing");
     wrap.innerHTML = firstRunHero();
     const go = (id) => document.getElementById(id).click();
     wrap.querySelector(".fr-primary").onclick = () => go("new-project-btn");

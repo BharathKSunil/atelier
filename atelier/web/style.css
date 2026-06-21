@@ -2320,21 +2320,31 @@ h3 {
 }
 
 /* ---------- first-run landing: the contact sheet ---------- */
+#project-cards.landing {
+  display: block;
+} /* opt out of the card grid so the hero spans the full width */
 .firstrun {
-  max-width: 720px;
-  margin: 5vh auto 0;
-  text-align: center;
+  display: grid;
+  grid-template-columns: 1.04fr 0.96fr;
+  align-items: center;
+  gap: clamp(40px, 6vw, 92px);
+  max-width: 1200px;
+  margin: 0 auto;
+  min-height: calc(100vh - 250px);
+}
+.fr-copy {
+  text-align: left;
 }
 .firstrun .eyebrow {
-  margin-bottom: 14px;
+  margin-bottom: 16px;
 }
 .fr-head {
   font-family: var(--serif);
   font-weight: 500;
-  font-size: clamp(30px, 4.4vw, 46px);
-  line-height: 1.08;
-  letter-spacing: -0.01em;
-  margin: 0 0 16px;
+  font-size: clamp(34px, 3.6vw, 54px);
+  line-height: 1.06;
+  letter-spacing: -0.015em;
+  margin: 0 0 18px;
   color: var(--ink);
 }
 .fr-head em {
@@ -2343,10 +2353,10 @@ h3 {
 }
 .fr-sub {
   color: var(--muted);
-  font-size: 15px;
+  font-size: 15.5px;
   line-height: 1.65;
-  max-width: 56ch;
-  margin: 0 auto 30px;
+  max-width: 48ch;
+  margin: 0 0 30px;
 }
 .fr-sub em {
   color: var(--ink-dim);
@@ -2354,12 +2364,13 @@ h3 {
 }
 .fr-sheet {
   position: relative;
+  display: flex;
+  gap: 12px;
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: var(--r);
   box-shadow: var(--shadow);
-  padding: 16px 18px 10px;
-  margin: 0 auto 30px;
+  padding: 16px;
   overflow: hidden;
 }
 /* one warm raking light falling across the sheet toward the keeper */
@@ -2368,20 +2379,22 @@ h3 {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background: linear-gradient(105deg, transparent 36%, rgba(205, 163, 92, 0.13) 72%, transparent 100%);
+  background: linear-gradient(120deg, transparent 28%, rgba(205, 163, 92, 0.12) 80%, transparent 100%);
 }
+/* vertical sprocket rails framing the sheet */
 .fr-rail {
-  height: 9px;
+  width: 9px;
+  flex: none;
   border-radius: 2px;
   background-color: var(--line-soft);
-  background-image: repeating-linear-gradient(90deg, var(--stage) 0 7px, transparent 7px 13px);
+  background-image: repeating-linear-gradient(0deg, var(--stage) 0 7px, transparent 7px 13px);
   opacity: 0.7;
 }
 .fr-cells {
+  flex: 1;
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 12px;
-  padding: 12px 2px;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
   position: relative;
   z-index: 1;
 }
@@ -2484,7 +2497,7 @@ h3 {
 .fr-actions {
   display: flex;
   gap: 12px;
-  justify-content: center;
+  justify-content: flex-start;
   margin-bottom: 16px;
 }
 .fr-trust {
@@ -2527,9 +2540,23 @@ h3 {
     transform: none;
   }
 }
-@media (max-width: 560px) {
-  .fr-cells {
-    grid-template-columns: repeat(2, 1fr);
+@media (max-width: 900px) {
+  .firstrun {
+    grid-template-columns: 1fr;
+    min-height: 0;
+    gap: 32px;
+    margin-top: 4vh;
+    max-width: 640px;
+  }
+  .fr-copy {
+    text-align: center;
+  }
+  .fr-sub {
+    margin-left: auto;
+    margin-right: auto;
+  }
+  .fr-actions {
+    justify-content: center;
   }
 }
 .sentinel {
