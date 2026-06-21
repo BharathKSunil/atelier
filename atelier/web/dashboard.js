@@ -4,6 +4,47 @@ import { confirmDialog } from "./dialog.js";
 
 let showArchived = false;
 
+// First-run landing: a blank darkroom contact sheet whose four cells ARE the pipeline,
+// the last one a lit "keeper". Decorative sheet (aria-hidden) + the two real CTAs.
+const FR_STEPS = [
+  { t: "Index photos", s: "detect + embed every face" },
+  { t: "Group people", s: "cluster faces into people" },
+  { t: "Find bursts", s: "gather frames from one moment" },
+  { t: "Score & pick", s: "the best frame — your keeper", keeper: true },
+];
+const FR_BRACKETS = `<svg class="fr-brackets" viewBox="0 0 64 64" fill="none" aria-hidden="true">
+  <g stroke="#cda35c" stroke-width="2.6" stroke-linecap="round">
+    <path d="M10 20 V10 H20"/><path d="M44 10 H54 V20"/><path d="M54 44 V54 H44"/><path d="M20 54 H10 V44"/>
+  </g></svg>`;
+
+function firstRunHero() {
+  const cells = FR_STEPS.map(
+    (st, i) => `<figure class="fr-cell${st.keeper ? " keeper" : ""}" style="--d:${i * 90}ms">
+      <div class="fr-frame">${st.keeper ? `${FR_BRACKETS}<span class="fr-dot"></span>` : ""}<span class="fr-no">0${i + 1}</span></div>
+      <figcaption><b>${escapeHtml(st.t)}</b><span>${escapeHtml(st.s)}</span></figcaption>
+    </figure>`,
+  ).join("");
+  return `<section class="firstrun">
+    <div class="eyebrow fr-rise" style="--d:0ms">A blank sheet, ready to develop</div>
+    <h1 class="fr-head fr-rise" style="--d:60ms">Twenty thousand frames.<br />One afternoon to the <em>keepers</em>.</h1>
+    <p class="fr-sub fr-rise" style="--d:120ms">
+      Atelier indexes a folder of photos, learns every face, gathers each burst back into the moment it
+      came from, and surfaces the one frame worth keeping — so you cull by saying <em>yes</em>, not by scrolling.
+    </p>
+    <div class="fr-sheet fr-rise" style="--d:200ms" aria-hidden="true">
+      <div class="fr-rail"></div>
+      <div class="fr-cells">${cells}</div>
+      <div class="fr-rail"></div>
+      <div class="fr-ticks">01 · 02 · 03 · ●</div>
+    </div>
+    <div class="fr-actions fr-rise" style="--d:320ms">
+      <button class="btn fr-primary">+ Develop your first sheet</button>
+      <button class="btn ghost fr-import">Import an existing library →</button>
+    </div>
+    <p class="fr-trust fr-rise" style="--d:380ms">Originals are never touched · everything runs on this machine.</p>
+  </section>`;
+}
+
 export async function renderDashboard() {
   const wrap = document.getElementById("project-cards");
   wrap.innerHTML = `<p class="muted">Loading…</p>`;
@@ -24,8 +65,10 @@ export async function renderDashboard() {
   }
   const visible = projects.filter((p) => (showArchived ? p.archived : !p.archived));
   if (!projects.length) {
-    wrap.innerHTML = `<div class="empty"><div class="big">No projects yet</div>
-      Create one to index a folder of photos.</div>`;
+    wrap.innerHTML = firstRunHero();
+    const go = (id) => document.getElementById(id).click();
+    wrap.querySelector(".fr-primary").onclick = () => go("new-project-btn");
+    wrap.querySelector(".fr-import").onclick = () => go("import-project-btn");
     return;
   }
   if (!visible.length) {
