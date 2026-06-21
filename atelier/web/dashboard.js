@@ -7,20 +7,29 @@ let showArchived = false;
 // First-run landing: a blank darkroom contact sheet whose four cells ARE the pipeline,
 // the last one a lit "keeper". Decorative sheet (aria-hidden) + the two real CTAs.
 const FR_STEPS = [
-  { t: "Index photos", s: "detect + embed every face" },
-  { t: "Group people", s: "cluster faces into people" },
-  { t: "Find bursts", s: "gather frames from one moment" },
-  { t: "Score & pick", s: "the best frame — your keeper", keeper: true },
+  { t: "Index photos", s: "detect + embed every face", m: "index" },
+  { t: "Group people", s: "cluster faces into people", m: "group" },
+  { t: "Find bursts", s: "gather frames from one moment", m: "burst" },
+  { t: "Score & pick", s: "the best frame — your keeper", m: "keeper", keeper: true },
 ];
 const FR_BRACKETS = `<svg class="fr-brackets" viewBox="0 0 64 64" fill="none" aria-hidden="true">
   <g stroke="#cda35c" stroke-width="2.6" stroke-linecap="round">
     <path d="M10 20 V10 H20"/><path d="M44 10 H54 V20"/><path d="M54 44 V54 H44"/><path d="M20 54 H10 V44"/>
   </g></svg>`;
+// a warm "photo" of a person (echoes the app's demo faces) — the same moment, shown
+// at each pipeline stage so the contact sheet reads as a real shoot being processed.
+const FR_FACE = `<span class="fr-face"></span>`;
+function frMotif(m) {
+  if (m === "index") return `${FR_FACE}<span class="fr-detect"></span>`;
+  if (m === "group") return `<span class="fr-cluster">${FR_FACE.repeat(3)}</span>`;
+  if (m === "burst") return `<span class="fr-burst"><i></i><i></i><i>${FR_FACE}</i></span>`;
+  return `${FR_FACE}${FR_BRACKETS}<span class="fr-dot"></span>`; // keeper
+}
 
 function firstRunHero() {
   const cells = FR_STEPS.map(
     (st, i) => `<figure class="fr-cell${st.keeper ? " keeper" : ""}" style="--d:${260 + i * 90}ms">
-      <div class="fr-frame">${st.keeper ? `${FR_BRACKETS}<span class="fr-dot"></span>` : ""}<span class="fr-no">0${i + 1}</span></div>
+      <div class="fr-frame">${frMotif(st.m)}<span class="fr-no">0${i + 1}</span></div>
       <figcaption><b>${escapeHtml(st.t)}</b><span>${escapeHtml(st.s)}</span></figcaption>
     </figure>`,
   ).join("");

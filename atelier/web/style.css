@@ -2403,33 +2403,99 @@ h3 {
 }
 .fr-frame {
   position: relative;
+  display: grid;
+  place-items: center;
   aspect-ratio: 3 / 2;
-  background: var(--stage);
+  /* a warm, dim "photo" so the cells read as frames of a shoot, not empty boxes */
+  background: radial-gradient(125% 135% at 50% 36%, #2c2114 0%, #14100b 78%);
   border-radius: 5px;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.03);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
   overflow: hidden;
   transition:
     filter 0.3s,
     background 0.3s;
 }
-/* registration crosshair on the blank (unexposed) frames */
-.fr-cell:not(.keeper) .fr-frame::before,
-.fr-cell:not(.keeper) .fr-frame::after {
+/* a warm "photo" of a person — echoes the app's demo faces */
+.fr-face {
+  position: relative;
+  width: 34%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 36%, #e0a86f 0%, #a9743f 72%, #7e5530 100%);
+  box-shadow: 0 3px 10px -3px rgba(0, 0, 0, 0.6);
+}
+.fr-face::before,
+.fr-face::after {
   content: "";
   position: absolute;
-  background: var(--line);
-  left: 50%;
-  top: 50%;
+  top: 42%;
+  width: 9%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: #2a1b0f;
 }
-.fr-cell:not(.keeper) .fr-frame::before {
-  width: 1px;
-  height: 26%;
-  transform: translate(-50%, -50%);
+.fr-face::before {
+  left: 31%;
 }
-.fr-cell:not(.keeper) .fr-frame::after {
-  height: 1px;
-  width: 26%;
-  transform: translate(-50%, -50%);
+.fr-face::after {
+  right: 31%;
+}
+/* 01 index — a gold face-detection box hugging the face */
+.fr-detect {
+  position: absolute;
+  inset: 26% 30%;
+  border: 1px solid var(--gold);
+  border-radius: 3px;
+  box-shadow: 0 0 0 3px rgba(205, 163, 92, 0.08);
+}
+/* 02 group — three overlapping faces (people), varied warm tones */
+.fr-cluster {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 74%;
+}
+.fr-cluster .fr-face {
+  width: 38%;
+  flex: none;
+  margin: 0 -6%;
+}
+.fr-cluster .fr-face:nth-child(2) {
+  background: radial-gradient(circle at 50% 36%, #d895b3 0%, #9c5f80 100%);
+  z-index: 1;
+}
+.fr-cluster .fr-face:nth-child(3) {
+  background: radial-gradient(circle at 50% 36%, #86abc4 0%, #4f7790 100%);
+}
+/* 03 burst — three offset near-identical frames, the front one with the face */
+.fr-burst {
+  position: relative;
+  width: 52%;
+  aspect-ratio: 3 / 2;
+}
+.fr-burst i {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 3px;
+  background: radial-gradient(circle at 50% 40%, #2a2014 0%, #14100b 80%);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.fr-burst i:nth-child(1) {
+  transform: translate(-17%, -20%);
+  opacity: 0.5;
+  box-shadow: inset 0 0 0 1px var(--line-soft);
+}
+.fr-burst i:nth-child(2) {
+  transform: translate(-8%, -10%);
+  opacity: 0.72;
+}
+.fr-burst i:nth-child(3) {
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.fr-burst i:nth-child(3) .fr-face {
+  width: 48%;
 }
 .fr-no {
   position: absolute;
@@ -2437,14 +2503,19 @@ h3 {
   left: 7px;
   font-size: 9px;
   letter-spacing: 0.14em;
-  color: var(--faint);
-  z-index: 2;
+  color: var(--ink-dim);
+  z-index: 3;
 }
 .fr-cell.keeper .fr-no {
   color: var(--gold);
 }
+/* 04 keeper — the developed pick: face dimmed under the gold focus brackets + dot */
 .fr-cell.keeper .fr-frame {
-  background: radial-gradient(120% 120% at 50% 45%, #1a150d 0%, var(--stage) 70%);
+  background: radial-gradient(120% 120% at 50% 45%, #2a2014 0%, #14100b 72%);
+}
+.fr-cell.keeper .fr-face {
+  width: 30%;
+  filter: brightness(0.82);
 }
 .fr-brackets {
   position: absolute;
