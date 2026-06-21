@@ -86,10 +86,13 @@
               pro: if you have <strong>too many photos</strong>, it's for you. Everything stays on your machine.
             </p>
             <div class="hero-jobs reveal">
+              <span class="job"><b>01</b> Group by face — cluster people, browse by who's in the frame.</span>
               <span class="job"
-                ><b>01</b> Group by name — detect &amp; cluster faces, label people, browse their photos.</span
+                ><b>02</b> Best of a burst — score every frame for its intent, keep the one that earns it.</span
               >
-              <span class="job"><b>02</b> Best of a burst — score the whole frame, keep the one that's worth it.</span>
+              <span class="job"
+                ><b>03</b> Cull your way — your buckets, your print list, a model that learns your eye.</span
+              >
             </div>
             <div class="hero-actions reveal">
               <a class="btn btn-gold" href="#demo">Try the live demo ↓</a>
@@ -119,11 +122,12 @@
       <!-- marquee strip -->
       <div class="marquee" aria-hidden="true">
         <div class="marquee-track">
-          <span>Non-destructive</span><i>✦</i><span>Group-aware scoring</span><i>✦</i><span>Faces by person</span
-          ><i>✦</i><span>Runs on Apple Silicon</span><i>✦</i><span>SQLite, per project</span><i>✦</i
-          ><span>Loopback only</span><i>✦</i><span>Non-destructive</span><i>✦</i><span>Group-aware scoring</span><i>✦</i
-          ><span>Faces by person</span><i>✦</i><span>Runs on Apple Silicon</span><i>✦</i><span>SQLite, per project</span
-          ><i>✦</i><span>Loopback only</span><i>✦</i>
+          <span>Non-destructive</span><i>✦</i><span>Context-aware picks</span><i>✦</i><span>Explains its picks</span
+          ><i>✦</i><span>Faces by person</span><i>✦</i><span>Learns your eye</span><i>✦</i><span>Portable projects</span
+          ><i>✦</i><span>SQLite, per project</span><i>✦</i><span>Loopback only</span><i>✦</i><span>Non-destructive</span
+          ><i>✦</i><span>Context-aware picks</span><i>✦</i><span>Explains its picks</span><i>✦</i
+          ><span>Faces by person</span><i>✦</i><span>Learns your eye</span><i>✦</i><span>Portable projects</span><i>✦</i
+          ><span>SQLite, per project</span><i>✦</i><span>Loopback only</span><i>✦</i>
         </div>
       </div>
 
@@ -206,8 +210,9 @@
             <span class="ph">Score</span>
             <h3>Pick the keeper</h3>
             <p>
-              MediaPipe landmarks read eyes / smile / frontality; one blink disqualifies a frame. The best face per
-              person and the best frame per burst fall out.
+              One MediaPipe pass reads per-eye blink, head pose, gaze and a genuine-vs-posed smile; numpy reads
+              sharpness, exposure, colour and composition. Each frame is then scored <em>per intent</em> — group photos
+              stay eyes-strict, candids let a great moment beat a blink — so the keeper per burst rises to the top.
             </p>
           </li>
         </ol>
@@ -302,54 +307,96 @@
         <div class="section-head reveal">
           <span class="kicker">What's in the box</span>
           <h2>A culling tool, <em>not</em> a viewer.</h2>
+          <p class="section-sub">
+            Every frame is read on dozens of signals — the strongest become picks, the telling ones become flags you can
+            trust.
+          </p>
+        </div>
+        <div class="feat-chips reveal" aria-label="What Atelier reads from each frame">
+          <span class="fc-label">reads</span><span class="fc">eyes open</span><span class="fc">eye contact</span
+          ><span class="fc">genuine smile</span><span class="fc">head pose</span><span class="fc">sharpness</span
+          ><span class="fc">exposure</span><span class="fc">composition</span><span class="fc-label">rewards</span
+          ><span class="fc good">bokeh</span><span class="fc good">golden hour</span><span class="fc-label">flags</span
+          ><span class="fc warn">blown</span><span class="fc warn">crushed</span><span class="fc warn">colour cast</span
+          ><span class="fc warn">tilted</span><span class="fc warn">busy bg</span
+          ><span class="fc warn">near-duplicate</span>
         </div>
         <div class="feat-grid">
           <article class="feat reveal">
             <span class="feat-i">◍</span>
-            <h3>By person</h3>
+            <h3>By person — and by pair</h3>
             <p>
-              Paginated, infinite-scroll people sidebar that handles thousands of faces. Rename inline; tick faces to
-              merge or split — and the manual edits survive re-clustering.
+              A people sidebar that scrolls clean through thousands of faces. Rename, merge, split — or reject a stray
+              face and let Atelier surface the others likely mis-filed with it. Then review by who's in frame: solo,
+              with others, or two together.
             </p>
           </article>
           <article class="feat reveal">
             <span class="feat-i">∿</span>
-            <h3>Burst-aware</h3>
+            <h3>Burst-aware picks</h3>
             <p>
-              Collapsed series rows expand to a lazy-loaded frame strip. Per-criterion pick pills — <em>group</em>,
-              <em>candid</em>, <em>aesthetic</em> — each toggled independently.
+              Frames gathered back into the burst they came from — by capture time and scene — then six keeper picks:
+              <em>group</em>, <em>everyone</em>, <em>smile</em>, <em>candid</em>, <em>moment</em>, <em>aesthetic</em>.
+              Switch on the ones you cull by.
             </p>
           </article>
           <article class="feat reveal">
-            <span class="feat-i">★</span>
-            <h3>Print list</h3>
+            <span class="feat-i">◉</span>
+            <h3>Reads the whole frame</h3>
             <p>
-              One keystroke adds the keeper. Range-star a run. Export copies the chosen originals into a fresh folder —
-              the source library is never touched.
+              Per-eye blink, head pose, gaze and a Duchenne smile from one MediaPipe pass; sharpness, exposure, colour
+              and composition in numpy. Plain tags — "7/8 eyes open", "eye&nbsp;contact" — and honest flags for the
+              blown, tilted, busy or near-duplicate.
+            </p>
+          </article>
+          <article class="feat reveal">
+            <span class="feat-i">⚖</span>
+            <h3>Context-aware, not brittle</h3>
+            <p>
+              A blink no longer nukes a frame. Group photos weight eyes strictly; moments stay soft, so a real moment
+              beats a technically-clean dud. Every pick shows its reasons.
+            </p>
+          </article>
+          <article class="feat reveal">
+            <span class="feat-i">◑</span>
+            <h3>Tunable, in plain words</h3>
+            <p>
+              Eleven dials in human language — detection confidence, face size, how tight a cluster, how close a burst.
+              Change one and only the passes it touches re-run; your names and picks ride along.
+            </p>
+          </article>
+          <article class="feat reveal">
+            <span class="feat-i">✦</span>
+            <h3>Learns your taste</h3>
+            <p>
+              Rate the auto-picks, or just keep what you keep — a local model learns from your own choices and re-ranks.
+              Warm-started from the heuristic, so it only ever helps. Nothing leaves the machine.
             </p>
           </article>
           <article class="feat reveal">
             <span class="feat-i">▤</span>
-            <h3>Buckets</h3>
+            <h3>Buckets &amp; print list</h3>
             <p>
-              User-defined collections — "Socials", "Candids", "Private" — an image can live in many. Number-key tagging
-              right from the review desk.
+              The print list is just your default bucket — <kbd>Space</kbd> drops the keeper in. Make your own
+              ("Socials", "Album", "Reject"); a photo lives in many. Tag from the desk, or drop everyone a person is in
+              with one click.
+            </p>
+          </article>
+          <article class="feat reveal">
+            <span class="feat-i">⤓</span>
+            <h3>Portable, private projects</h3>
+            <p>
+              Each project is one SQLite file with thumbnails baked in. Export a self-contained <code>.atelier</code>
+              bundle and open it on another machine; pin, archive, or delete. Originals never move.
             </p>
           </article>
           <article class="feat reveal">
             <span class="feat-i">↻</span>
-            <h3>Non-destructive re-runs</h3>
+            <h3>Resumable runs</h3>
             <p>
-              Re-index or re-cluster anytime. Renames, merges, splits and manual picks all carry over — anchored to
-              stable face / image ids, re-applied after the pipeline.
-            </p>
-          </article>
-          <article class="feat reveal">
-            <span class="feat-i">⚙</span>
-            <h3>Live run console</h3>
-            <p>
-              Per-phase progress, streaming logs, an error panel, and a grid of faces appearing as they're detected.
-              Durable per-run history survives a restart.
+              Index a 20,000-frame shoot off an external drive and walk away — it picks up where it stopped, parks a
+              corrupt file instead of crashing, and a clean-up re-run keeps every pick. Per-phase progress and logs
+              stream live; the history survives a restart.
             </p>
           </article>
         </div>
