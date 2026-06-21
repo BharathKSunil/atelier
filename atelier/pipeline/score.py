@@ -16,7 +16,7 @@ import numpy as np
 from PIL import Image
 from tqdm import tqdm
 
-from atelier import db, landmarks, quality
+from atelier import config, db, landmarks, quality
 
 # MediaPipe face-mesh landmark indices (same topology in the Tasks API)
 L_EYE = [33, 160, 158, 133, 153, 144]  # p1..p6 for EAR
@@ -82,16 +82,36 @@ def main():
             conn.execute("UPDATE faces SET is_best=1 WHERE id=?", (top["id"],))
     conn.commit()
 
-    # ---- per-image print + candid + aesthetic scores ----
+    # ---- per-image metrics: every photo analysed on every signal ("all the tags").
+    #      The SAME per-face inputs feed every criterion; only the weighting differs,
+    #      so a group photo stays eyes-strict while 'moment' lets a great frame win. ----
     for im in conn.execute(
-        """SELECT id, global_sharpness, global_sharpness_raw, exposure_score, thumbnail
+        """SELECT id, global_sharpness, global_sharpness_raw, exposure_score, thumbnail, width, height
                FROM images WHERE processed=1"""
     ).fetchall():
-        fs = list(conn.execute("SELECT eye_open, smile, frontality FROM faces WHERE image_id=?", (im["id"],)))
-        eyes = [r["eye_open"] for r in fs if r["eye_open"] is not None]
-        smiles = [r["smile"] or 0.0 for r in fs]
-        fronts = [r["frontality"] or 0.0 for r in fs]
-        expr = [((r["smile"] or 0.0) + (r["frontality"] or 0.0)) / 2.0 for r in fs]
+        fr = list(
+            conn.execute(
+                "SELECT eye_open, smile, frontality, bbox_x1, bbox_y1, bbox_x2, bbox_y2 FROM faces WHERE image_id=?",
+                (im["id"],),
+            )
+        )
+        faces = [
+            {
+                "eye": r["eye_open"] if r["eye_open"] is not None else 0.5,
+                "smile": r["smile"] or 0.0,
+                "front": r["frontality"] or 0.0,
+                "area": quality.face_area((r["bbox_x1"] or 0, r["bbox_y1"] or 0, r["bbox_x2"] or 0, r["bbox_y2"] or 0)),
+            }
+            for r in fr
+        ]
+        bboxes = [
+            (r["bbox_x1"], r["bbox_y1"], r["bbox_x2"], r["bbox_y2"])
+            for r in fr
+            if None not in (r["bbox_x1"], r["bbox_y1"], r["bbox_x2"], r["bbox_y2"])
+        ]
+        eyes = [f["eye"] for f in faces]
+        smiles = [f["smile"] for f in faces]
+        fronts = [f["front"] for f in faces]
         ex = im["exposure_score"] or 0.0
         # monotone squash on raw sharpness (no more cap-500 saturation); fall back
         # to the stored normalized value for pre-Phase-1 rows without raw.
@@ -103,11 +123,28 @@ def main():
                 rgb = np.asarray(Image.open(io.BytesIO(im["thumbnail"])).convert("RGB"))
             except Exception:
                 rgb = None
-        cs = quality.candid_score(gs, ex, smiles, fronts)
+        px = float((im["width"] or 1) * (im["height"] or 1))
+        subject_size = (max((f["area"] for f in faces), default=0.0) / px) if faces else None
         conn.execute(
-            """UPDATE images SET global_sharpness=?, aesthetic_score=?, candid_score=?,
-               print_score=? WHERE id=?""",
-            (gs, quality.aesthetic_proxy(rgb, gs, ex), cs, quality.print_score(gs, ex, eyes, expr), im["id"]),
+            """UPDATE images SET global_sharpness=?, aesthetic_score=?, candid_score=?, print_score=?,
+               moment_score=?, cohesion=?, joy=?, comp_score=?,
+               eyes_open_frac=?, smile_frac=?, front_frac=?, eyes_min=?, subject_size=? WHERE id=?""",
+            (
+                gs,
+                quality.aesthetic_proxy(rgb, gs, ex),
+                quality.candid_score(gs, ex, faces),
+                quality.print_score(gs, ex, faces),
+                quality.moment_score(gs, ex, faces),
+                quality.cohesion_score(faces),
+                quality.joy_score(faces),
+                quality.composition_score(bboxes, im["width"], im["height"]),
+                quality.fraction_at_least(eyes, config.EYE_OPEN_THR),
+                quality.fraction_at_least(smiles, config.SMILE_THR),
+                quality.fraction_at_least(fronts, config.FRONT_THR),
+                (min(eyes) if eyes else None),
+                subject_size,
+                im["id"],
+            ),
         )
     conn.commit()
 

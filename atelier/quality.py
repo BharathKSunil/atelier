@@ -125,8 +125,7 @@ def face_quality(sharp, bright, eye, frontal, sm):
 
 
 def _eyes_aggregate(eyes_list):
-    """Face-count-aware: a lone subject uses mean; a big group uses min (one blink
-    ruins it); small groups blend. Avoids over-penalizing single-subject candids."""
+    """(legacy helper, kept for reference/tests) Face-count-aware eye aggregate."""
     n = len(eyes_list)
     if n == 0:
         return 0.5
@@ -137,31 +136,167 @@ def _eyes_aggregate(eyes_list):
     return min(eyes_list)
 
 
-def print_score(global_sharp, exposure, eyes_list, expr_list):
-    """Best-frame-to-print score (the 'group' criterion). Eyes aggregation adapts
-    to face count. global_sharp, exposure image-level [0,1]; expr_list per-face
-    (smile+frontality)/2."""
-    eyes = _eyes_aggregate(eyes_list)
-    expr = (sum(expr_list) / len(expr_list)) if expr_list else 0.5
+# ---------------------------------------------------------------- per-image metrics
+# Every per-image criterion is computed from the same per-face inputs. `faces` is a
+# list of {"eye","smile","front","area"} (eye/smile/front in [0,1]; area in px²). The
+# SAME signals feed every pick; only the WEIGHTING differs, so context decides — a
+# group photo keeps eyes strict, a moment lets a great frame beat a blink.
+def face_area(bbox):
+    x1, y1, x2, y2 = bbox
+    return max(0.0, x2 - x1) * max(0.0, y2 - y1)
+
+
+def area_weights(areas):
+    """sqrt-area weights, normalized — a tiny background face can't dominate a foreground one."""
+    a = np.sqrt(np.clip(np.asarray(areas, dtype=np.float64), 0.0, None))
+    s = float(a.sum())
+    if s <= 0.0:
+        n = len(areas)
+        return np.full(n, 1.0 / n) if n else np.zeros(0)
+    return a / s
+
+
+def fraction_at_least(values, thr):
+    """Fraction of faces meeting a threshold (the plain-language 'everyone' tags). None if no faces."""
+    v = [x for x in values if x is not None]
+    if not v:
+        return None
+    return float(sum(1 for x in v if x >= thr) / len(v))
+
+
+def blur_floor(global_sharp):
+    """Continuous [PRINT_BLUR_PENALTY .. 1] multiplier replacing the old ×0.25 step
+    cliff: heavy when very soft, ~1 when sharp, smooth through the disqualify point —
+    so a frame at 0.149 isn't slammed while 0.151 sails through."""
+    x = (float(global_sharp) - config.PRINT_DISQUALIFY_SHARP) / max(config.BLUR_FLOOR_WIDTH, 1e-6)
+    s = 1.0 / (1.0 + np.exp(-x))
+    return float(config.PRINT_BLUR_PENALTY + (1.0 - config.PRINT_BLUR_PENALTY) * s)
+
+
+def _faces_arrays(faces):
+    eyes = [f.get("eye", 0.5) for f in faces]
+    smiles = [f.get("smile", 0.0) for f in faces]
+    fronts = [f.get("front", 0.0) for f in faces]
+    areas = [f.get("area", 1.0) for f in faces]
+    return eyes, smiles, fronts, areas
+
+
+def group_eyes(faces):
+    """Eyes-strict aggregate for the GROUP pick: area-weighted mean blended with the
+    WORST eye, so a foreground blink really hurts but a tiny background blink doesn't
+    zero the frame. (For a group photo, eyes matter most.)"""
+    if not faces:
+        return 0.5
+    eyes, _, _, areas = _faces_arrays(faces)
+    w = area_weights(areas)
+    wmean = float(np.dot(np.asarray(eyes, float), w)) if len(w) else float(np.mean(eyes))
+    return config.GROUP_EYES_WMEAN * wmean + config.GROUP_EYES_MIN * float(min(eyes))
+
+
+def _stragglers(faces):
+    return sum(
+        1
+        for f in faces
+        if f.get("eye", 1.0) < config.EYE_OPEN_THR
+        or f.get("smile", 1.0) < config.SMILE_THR
+        or f.get("front", 1.0) < config.FRONT_THR
+    )
+
+
+def print_score(global_sharp, exposure, faces):
+    """The GROUP criterion. Eyes stay important: eyes-strict aggregate + a per-straggler
+    penalty + fraction-based expression so one frowner among many is visible. Continuous
+    blur floor. `faces`: list of {eye,smile,front,area}. [0,1]."""
+    if faces:
+        eyes_term = group_eyes(faces)
+        _, smiles, fronts, _ = _faces_arrays(faces)
+        fs = fraction_at_least(smiles, config.SMILE_THR) or 1.0
+        ff = fraction_at_least(fronts, config.FRONT_THR) or 1.0
+        expr = 0.5 * fs + 0.5 * ff
+        strag = min(_stragglers(faces), config.STRAGGLER_CAP) * config.STRAGGLER_PEN
+    else:
+        eyes_term, expr, strag = 0.5, 0.5, 0.0
     score = (
         config.PRINT_W_SHARP * global_sharp
         + config.PRINT_W_EXPOSURE * exposure
-        + config.PRINT_W_EYES * eyes
+        + config.PRINT_W_EYES * eyes_term
         + config.PRINT_W_EXPR * expr
+        - strag
     )
-    if global_sharp < config.PRINT_DISQUALIFY_SHARP:
-        score *= config.PRINT_BLUR_PENALTY  # motion blur => not printable
-    return float(score)
+    return float(np.clip(score * blur_floor(global_sharp), 0.0, 1.0))
 
 
-def candid_score(global_sharp, exposure, smile_list, frontality_list):
-    """The 'candid' criterion: natural/un-posed — present smiles + off-axis gaze,
-    while still technically usable (gated on sharpness/exposure). [0,1]."""
-    if not smile_list:
+def moment_score(global_sharp, exposure, faces):
+    """The MOMENT criterion — a great frame beats a blink. Eyes are a SOFT mean, never
+    a gate; the strongest smile carries the frame; sharpness still matters. [0,1]."""
+    if faces:
+        eyes, smiles, fronts, _ = _faces_arrays(faces)
+        joy = max(smiles) if smiles else 0.0
+        eng = float(np.mean([0.5 * e + 0.5 * fr for e, fr in zip(eyes, fronts, strict=True)]))
+    else:
+        joy, eng = 0.0, 0.5
+    score = (
+        config.MOMENT_W_JOY * joy
+        + config.MOMENT_W_ENGAGE * eng
+        + config.MOMENT_W_SHARP * global_sharp
+        + config.MOMENT_W_EXPO * exposure
+    )
+    return float(np.clip(score * blur_floor(global_sharp), 0.0, 1.0))
+
+
+def cohesion_score(faces):
+    """'Everyone engaged' (the EVERYONE pick): fraction of faces simultaneously
+    eyes-open / smiling / facing, blended with the mean engagement. [0,1]."""
+    if not faces:
+        return 0.5
+    eyes, smiles, fronts, _ = _faces_arrays(faces)
+    frac = (
+        (fraction_at_least(eyes, config.EYE_OPEN_THR) or 0.0)
+        + (fraction_at_least(smiles, config.SMILE_THR) or 0.0)
+        + (fraction_at_least(fronts, config.FRONT_THR) or 0.0)
+    ) / 3.0
+    mean_eng = float(np.mean([e * (0.5 + 0.5 * fr) for e, fr in zip(eyes, fronts, strict=True)]))
+    return float(np.clip(0.6 * frac + 0.4 * mean_eng, 0.0, 1.0))
+
+
+def joy_score(faces):
+    """Biggest smile in the frame (the SMILE pick)."""
+    if not faces:
         return 0.0
-    sm = sum(smile_list) / len(smile_list)
-    off = 1.0 - (sum(frontality_list) / len(frontality_list))  # off-axis = candid
+    _, smiles, _, _ = _faces_arrays(faces)
+    return float(max(smiles) if smiles else 0.0)
+
+
+def candid_score(global_sharp, exposure, faces):
+    """The CANDID criterion: natural/un-posed — present smile + off-axis gaze, SOFT on
+    eyes, still technically usable. [0,1]."""
+    if not faces:
+        return 0.0
+    _, smiles, fronts, _ = _faces_arrays(faces)
+    sm = sum(smiles) / len(smiles)
+    off = 1.0 - (sum(fronts) / len(fronts))  # off-axis = candid
     score = 0.35 * global_sharp + 0.15 * exposure + 0.30 * sm + 0.20 * off
-    if global_sharp < config.PRINT_DISQUALIFY_SHARP:
-        score *= config.PRINT_BLUR_PENALTY
-    return float(max(0.0, min(1.0, score)))
+    return float(np.clip(score * blur_floor(global_sharp), 0.0, 1.0))
+
+
+def composition_score(bboxes, width, height):
+    """Crop-safety (no face sliced at the edge) + rule-of-thirds (area-weighted subject
+    centroid) + headroom, from face bboxes (original px). No faces -> neutral. [0,1]."""
+    if not bboxes or not width or not height:
+        return 0.5
+    W, H = float(width), float(height)
+    m = 0.01
+    pen = sum(
+        config.CROP_EDGE_PEN
+        for (x1, y1, x2, y2) in bboxes
+        if x1 <= m * W or y1 <= m * H or x2 >= (1.0 - m) * W or y2 >= (1.0 - m) * H
+    )
+    crop = max(0.0, 1.0 - min(pen, 1.0))
+    w = area_weights([face_area(b) for b in bboxes])
+    cx = sum(w[i] * ((bboxes[i][0] + bboxes[i][2]) / 2.0 / W) for i in range(len(bboxes)))
+    cy = sum(w[i] * ((bboxes[i][1] + bboxes[i][3]) / 2.0 / H) for i in range(len(bboxes)))
+    d = min(((cx - px) ** 2 + (cy - py) ** 2) ** 0.5 for px in (1 / 3, 2 / 3) for py in (1 / 3, 2 / 3))
+    thirds = float(np.clip(1.0 - d / 0.393, 0.0, 1.0))  # center -> nearest third ≈ 0.393
+    top = min(b[1] for b in bboxes) / H
+    headroom = float(np.clip(1.0 - abs(top - 0.12) / 0.25, 0.0, 1.0))
+    return float(np.clip(0.45 * crop + 0.35 * thirds + 0.20 * headroom, 0.0, 1.0))

@@ -63,10 +63,40 @@ HDBSCAN_SELECTION_EPSILON = 0.0
 CLUSTER_MERGE_COSINE = 0.5
 
 # --- Multi-criteria picks per series (use-case 2) ---
-# 'group'    = best group-aware print_score (everyone's eyes open)
-# 'aesthetic'= highest aesthetic score (linear head over the DINOv2 embedding)
-# 'candid'   = natural / un-posed (lower frontality + present smile)
-PICK_TYPES = ["group", "aesthetic", "candid"]
+# Every metric is computed for every photo (see quality.py / score.py); each pick
+# weights them differently so context decides — a GROUP photo keeps eyes strict
+# (a blink is fatal), while MOMENT lets a great frame beat a blink.
+# 'group'    = best group-aware print frame; eyes STRICT (worst-eye + straggler penalty)
+# 'everyone' = most people simultaneously eyes-open + smiling + facing (cohesion)
+# 'smile'    = biggest smile in the frame (joy)
+# 'candid'   = natural / un-posed (present smile + off-axis), soft on eyes
+# 'moment'   = the decisive frame; eyes barely matter, rewards expression + sharpness
+# 'aesthetic'= highest aesthetic score (color + exposure + sharpness proxy)
+PICK_TYPES = ["group", "everyone", "smile", "candid", "moment", "aesthetic"]
+
+# Per-face "looks good" thresholds — drive the plain-language fraction tags
+# ("7/8 eyes open") and the straggler penalty.
+EYE_OPEN_THR = 0.5
+SMILE_THR = 0.35
+FRONT_THR = 0.5
+
+# Group pick: eyes stay important. eyes_term = a blend of the area-weighted mean
+# (a tiny background blink can't dominate) and the worst eye (a foreground blink hurts),
+# minus a per-straggler penalty. Continuous blur floor replaces the old ×0.25 step.
+GROUP_EYES_WMEAN = 0.5
+GROUP_EYES_MIN = 0.5
+STRAGGLER_PEN = 0.05
+STRAGGLER_CAP = 4
+BLUR_FLOOR_WIDTH = 0.04  # sigmoid half-width for the smooth blur floor
+
+# Moment pick: a great frame beats a blink — eyes are a soft mean, never a gate.
+MOMENT_W_JOY = 0.40
+MOMENT_W_ENGAGE = 0.15
+MOMENT_W_SHARP = 0.30
+MOMENT_W_EXPO = 0.15
+
+# Composition (from face bboxes): crop-safety + rule-of-thirds + headroom.
+CROP_EDGE_PEN = 0.25  # per-face penalty for a face touching the frame edge
 
 # --- Series grouping (use-case 2: same moment / burst) ---
 SERIES_TIME_GAP_S = 10.0  # EXIF gap > this starts a new candidate block
