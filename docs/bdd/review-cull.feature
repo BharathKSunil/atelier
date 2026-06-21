@@ -19,17 +19,29 @@ Feature: Review / cull — step through bursts and choose keepers
     Then the response status is 200
     And every returned item has a "frame_count" greater than 1
     And no singleton series (frame_count of 1) is included
-    And the items are ordered by "frame_count" descending
+    And the items are ordered chronologically by "time_start" (sort=time is the default)
+    And each item carries "time_start", "time_end" and "reviewed_at"
+
+  @api
+  Scenario Outline: Bursts can be re-sorted from the Review bar
+    When the client requests GET "/api/p/wedding/series?sort=<sort>"
+    Then the response status is 200
+    And the bursts are ordered by "<ordered_by>"
+
+    Examples:
+      | sort  | ordered_by              |
+      | time  | time_start ascending    |
+      | count | frame_count descending  |
+      | score | best_score descending   |
 
   @api @persistence
-  Scenario: The series list is paged and the UI walks every page
+  Scenario: The series list is paged and the first burst renders after page one
     Given there are 250 multi-frame bursts
     When the Review view mounts
-    Then it requests GET "/api/p/wedding/series?offset=0&limit=200"
-    And the response "next_offset" is 200
-    And it then requests GET "/api/p/wedding/series?offset=200&limit=200"
-    And the response "next_offset" is null
-    And all 250 bursts are loaded before the first burst renders
+    Then it requests GET "/api/p/wedding/series?sort=time&offset=0&limit=200"
+    And the first burst renders as soon as page one arrives — it does not block on every page
+    And it keeps paging "offset=200&limit=200" in the background
+    And the burst counter denominator uses the server "total", not the pages loaded so far
 
   @ui
   Scenario: Empty state when there are no multi-frame bursts
@@ -60,11 +72,12 @@ Feature: Review / cull — step through bursts and choose keepers
     Then the stage shows the first (highest print_score) frame
 
   @api
-  Scenario: Burst frames come back ordered by print score
+  Scenario: Burst frames come back in capture sequence
     When the client requests GET "/api/p/wedding/series/7/images"
     Then the response status is 200
-    And the frames are ordered by "print_score" descending
+    And the frames are ordered by capture time ("taken_at", then "sub_sec", then id)
     And each frame carries an "is_print" flag reflecting the Print list
+    And each frame carries "taken_at", "face_count", "global_sharpness" and "exposure_score"
 
   # ---------------------------------------------------------------------------
   # Multi-criteria picks — auto-derived, manual override
@@ -213,7 +226,7 @@ Feature: Review / cull — step through bursts and choose keepers
 
   @ui
   Scenario: Starring a frame does not reorder the filmstrip or bounce me back
-    Given the filmstrip order was frozen when the burst loaded
+    Given the filmstrip is in capture sequence
     And I have scrolled to and selected the 6th frame as hero
     When I press "Space" to star the 6th frame
     Then the 6th frame stays in its position in the filmstrip
@@ -221,12 +234,12 @@ Feature: Review / cull — step through bursts and choose keepers
     And the filmstrip does not scroll back to the start
 
   @ui
-  Scenario: Featured frames (picks and starred) are placed first, once, on load
+  Scenario: The filmstrip stays in capture sequence — featured frames are highlighted in place
     Given burst 7 has a group pick, a candid pick, and two starred frames
     When the burst loads
-    Then the filmstrip lists the picked and starred frames first
-    And the remaining frames follow in print_score order
-    And this order is computed once and not recomputed on later stars
+    Then the filmstrip lists every frame in capture order
+    And the picked/starred frames are tagged in place, never hoisted to the front
+    And stepping Up/Down moves through that same sequence — selecting or starring never makes it jump
 
   # ---------------------------------------------------------------------------
   # Keyboard flow
@@ -253,9 +266,9 @@ Feature: Review / cull — step through bursts and choose keepers
     Then the view wraps to the first burst
 
   @ui
-  Scenario Outline: Up and Down move the hero within the frozen filmstrip
+  Scenario Outline: Up and Down move the hero through the capture sequence
     When I press "<key>"
-    Then the hero moves to the "<dir>" frame in filmstrip order
+    Then the hero moves to the "<dir>" frame in capture order
     And the filmstrip scrolls the new hero into view
 
     Examples:
@@ -282,19 +295,15 @@ Feature: Review / cull — step through bursts and choose keepers
     Then the bucket strip reads "No buckets yet — create them in the Buckets tab, then press 1–9 here."
 
   @ui
-  Scenario: Enter zooms the hero in the lightbox and F toggles fullscreen
+  Scenario: Zoom happens in place on the stage and works in fullscreen
     Given the hero frame is image 42
-    When I press "Enter"
-    Then the lightbox opens showing image 42
+    When I press "Z" (or Enter, or scroll the wheel over the stage)
+    Then the hero scales up in place on the stage — there is no separate popup to chase
+    And dragging pans the zoomed image and a zoom-percent badge is shown
+    And double-clicking resets it to fit
     When I press "F"
     Then the Review view toggles fullscreen
-
-  @ui
-  Scenario: Clicking the stage opens the lightbox across the whole burst
-    Given the burst has several frames and the hero is the 2nd
-    When I click the stage image
-    Then the lightbox opens with all burst frames in filmstrip order
-    And it starts at the current hero frame
+    And zoom still works, because the stage is inside the fullscreened element
 
   @ui
   Scenario: Keyboard shortcuts are ignored while a lightbox or modal is open
@@ -305,7 +314,71 @@ Feature: Review / cull — step through bursts and choose keepers
 
   @ui
   Scenario: A help bar documents the keyboard flow
-    Then the help fab shows "←→ bursts", "X skip", "↑↓ frames", "Space print", "1–9 buckets", "G/C/A tag", "F full", and "↵ zoom"
+    Then the help fab shows "←→ bursts", "X skip", "↑↓ frames", "Space print", "1–9 buckets", "G/C/A tag", "Z zoom", "I panel", and "F full"
+
+  # ---------------------------------------------------------------------------
+  # Inspector — per-person stats (decide who's looking good)
+  # ---------------------------------------------------------------------------
+
+  @api
+  Scenario: The frame's faces come back with per-person quality stats
+    When the client requests GET "/api/p/wedding/image/42/faces"
+    Then the response status is 200
+    And every face carries "eye_open", "smile", "frontality", "face_sharpness" and "quality_score"
+    And each face carries its "person_id" and "display_name" (or null when ungrouped)
+    And the faces are ordered largest bounding-box first
+
+  @ui
+  Scenario: The inspector lists everyone in the hero frame with their stats
+    Given the hero frame has two detected people
+    Then the inspector "People in this frame" section shows a row per person
+    And each row shows the person's name, face crop, and eyes/smile/frontality mini-bars
+    And a low score (eyes below 45%) is shown in a warning colour
+    When I press "I"
+    Then the inspector panel hides, and pressing "I" again shows it
+
+  # ---------------------------------------------------------------------------
+  # Pick feedback — rate the auto picks for retraining
+  # ---------------------------------------------------------------------------
+
+  @api @persistence
+  Scenario: Rating an auto pick records feedback anchored to the image
+    Given the auto "candid" pick of burst 7 is image 51
+    When I click 👎 on the "candid" feedback row
+    Then the client POSTs "/api/p/wedding/feedback" with pick_type "candid", auto_image_id 51 and verdict "bad"
+    And clicking "+ this" while frame 88 is the hero records better_image_id 88
+    And the feedback survives a pipeline rerun because it is keyed on the image, not the series id
+
+  @api
+  Scenario: Feedback is exportable as a retraining set
+    When the client requests GET "/api/p/wedding/feedback/export"
+    Then the response lists every verdict joined with the auto frame's path and scores
+    And, when a better frame was chosen, that frame's path and scores too
+
+  # ---------------------------------------------------------------------------
+  # Resume + reviewed state + resizable / movable panels
+  # ---------------------------------------------------------------------------
+
+  @ui @persistence
+  Scenario: Burst position and reviewed progress survive a reload
+    Given I have stepped through to burst 40 of 907
+    When I reload the page
+    Then Review resumes at burst 40, not burst 1
+    And the top progress bar reflects the bursts already marked reviewed (from the server)
+
+  @api @persistence
+  Scenario: Stepping past a burst marks it reviewed on the server
+    Given I am on burst 7 and it is not yet reviewed
+    When I advance to the next burst
+    Then the client POSTs "/api/p/wedding/series/7/reviewed" with reviewed true
+    And a later GET of the series shows burst 7 with a non-null "reviewed_at"
+
+  @ui @persistence
+  Scenario: The stage / inspector / filmstrip panels resize and move, and the layout persists
+    When I drag the vertical divider, the inspector widens and the new width is saved
+    And when I drag the horizontal divider, the filmstrip resizes and its height is saved
+    And when I click "⇄ move", the inspector swaps to the other side
+    And all of these survive a reload via localStorage
 
   # ---------------------------------------------------------------------------
   # Stale-slug guard + security
