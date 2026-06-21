@@ -46,6 +46,12 @@ and [`docs/design/scoring-taxonomy.md`](design/scoring-taxonomy.md) (quality met
 - **Feedback is a collapsed `<details>` accordion**.
 - New endpoints: `/buckets/<id>/set-default`, `/export-images`; `/buckets` returns `role`/`is_default`. Tests in `test_server.py`.
 
+## Project management  ✅ DONE
+- **Pin + Archive** — per-project flags in `registry.json` (`POST /api/projects/<slug>/flags`); dashboard sorts pinned first, hides archived behind an "Archived (N)" toggle.
+- **Portable export/import** — `GET /api/projects/<slug>/export` downloads a `.atelier` zip (WAL-checkpointed db.sqlite + manifest; thumbnails/embeddings included → self-contained). `POST /api/projects/import` adopts a bundle (or a bare Atelier `.sqlite`) as a new project after validating the schema. Dashboard: per-card Export (⤓), header Import.
+- **Light cleanup & re-run** — `POST /api/p/<slug>/cleanup` drops orphaned rows, requeues errored photos, VACUUMs, then re-runs the pipeline **incrementally** (keeps buckets/names/picks). Sits next to the full "Start over" on the Run page.
+- **Delete project** already existed (card → confirm → `DELETE /api/projects/<slug>`).
+
 ## ✨ Features (easiest → hardest)
 
 ### F1 — "Select all images" on the person view  ✅ DONE

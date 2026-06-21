@@ -55,6 +55,33 @@ export function mountRun(s) {
       start();
     };
 
+  const cleanBtn = document.getElementById("run-cleanup");
+  if (cleanBtn)
+    cleanBtn.onclick = async () => {
+      const ok = await confirmDialog({
+        title: "Clean up & re-run",
+        message:
+          "Drops orphaned/leftover rows, retries any photos that errored, reclaims space, " +
+          "then re-runs the pipeline <b>incrementally</b> — already-indexed photos are skipped.<br>" +
+          "<span class='muted'>Your buckets, names, picks and feedback are kept.</span>",
+        okLabel: "Clean up & re-run",
+      });
+      if (!ok) return;
+      let r;
+      try {
+        r = await post(`/api/p/${slug}/cleanup`, {});
+      } catch (e) {
+        toast(e && e.status === 409 ? "Stop the current run first" : "Could not clean up", true);
+        return;
+      }
+      const n = Object.values(r.removed || {}).reduce((a, b) => a + b, 0);
+      toast(`Cleaned ${n} stray rows, requeued ${r.requeued || 0}${r.run_started ? " — re-running…" : ""}`);
+      if (r.run_started) {
+        lastSeq = 0;
+        start();
+      }
+    };
+
   const stopBtn = document.getElementById("run-stop");
   if (stopBtn)
     stopBtn.onclick = async () => {
@@ -292,6 +319,8 @@ function render(s) {
   document.getElementById("run-again").classList.toggle("hidden", s.running);
   const fresh = document.getElementById("run-fresh");
   if (fresh) fresh.classList.toggle("hidden", s.running);
+  const clean = document.getElementById("run-cleanup");
+  if (clean) clean.classList.toggle("hidden", s.running);
 
   document.getElementById("live-face-count").textContent = s.faces_found || 0;
   const faceKey = (s.recent_face_ids || []).join(",");

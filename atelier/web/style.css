@@ -370,8 +370,37 @@ h3 {
   color: var(--gold);
   border-color: var(--gold-soft);
 }
+.proj-foot .spacer {
+  flex: 1;
+}
+.proj-foot .ic {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--ink-dim);
+  font-size: 14px;
+  line-height: 1;
+  padding: 3px 5px;
+  border-radius: 6px;
+}
+.proj-foot .ic:hover {
+  color: var(--gold);
+  background: var(--stage);
+}
+.proj-foot .ic.pin.on {
+  color: var(--gold);
+}
+.proj-card.pinned {
+  border-color: var(--gold-soft);
+}
+.pin-dot {
+  color: var(--gold);
+}
+#show-archived-btn.on {
+  color: var(--gold);
+  border-color: var(--gold-soft);
+}
 .proj-foot .del {
-  margin-left: auto;
   color: var(--ink-dim);
   background: none;
   border: none;

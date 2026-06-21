@@ -15,6 +15,7 @@ import os
 import secrets
 import shutil
 import sqlite3
+import tempfile
 import time
 from urllib.parse import urlparse
 
@@ -199,6 +200,8 @@ def create_app(projects_dir):
         out = []
         for p in projects.list_projects(projects_dir):
             item = dict(p)
+            item.setdefault("pinned", False)
+            item.setdefault("archived", False)
             item["stats"] = projects.stats(projects_dir, p["slug"])
             item["running"] = _runner(p["slug"]).state["running"]
             item["cover"] = []
@@ -216,7 +219,15 @@ def create_app(projects_dir):
             except Exception:
                 pass
             out.append(item)
+        out.sort(key=lambda x: (not x.get("pinned"), -(x.get("created_at") or 0)))  # pinned first, newest first
         return jsonify(out)
+
+    @app.post("/api/projects/<slug>/flags")
+    def project_flags(slug):
+        _require(slug)
+        body = request.json or {}
+        proj = projects.set_flags(projects_dir, slug, pinned=body.get("pinned"), archived=body.get("archived"))
+        return jsonify(ok=True, project=proj)
 
     @app.post("/api/projects")
     def create_project():
@@ -266,6 +277,45 @@ def create_app(projects_dir):
         projects.delete_project(projects_dir, slug)
         return jsonify(ok=True)
 
+    @app.get("/api/projects/<slug>/export")
+    def export_project(slug):
+        """Download a portable .atelier bundle (WAL-checkpointed db.sqlite + manifest)."""
+        _require(slug)
+        try:
+            path = projects.export_bundle(projects_dir, slug)
+        except ValueError as e:
+            return jsonify(ok=False, msg=str(e)), 400
+        resp = send_file(path, as_attachment=True, download_name=f"{slug}.atelier", mimetype="application/zip")
+
+        @resp.call_on_close
+        def _cleanup_tmp():
+            with contextlib.suppress(OSError):
+                os.remove(path)
+
+        return resp
+
+    @app.post("/api/projects/import")
+    def import_project():
+        """Adopt an exported bundle (or a bare Atelier .sqlite) as a new project. The
+        upload is validated for the Atelier schema before it's registered."""
+        f = request.files.get("file")
+        if f is None or not f.filename:
+            return jsonify(ok=False, msg="no file uploaded"), 400
+        fd, tmp = tempfile.mkstemp(suffix=".upload")
+        os.close(fd)
+        try:
+            f.save(tmp)
+            name = os.path.splitext(os.path.basename(f.filename))[0]
+            proj = projects.import_bundle(projects_dir, tmp, fallback_name=name)
+        except ValueError as e:
+            return jsonify(ok=False, msg=str(e)), 400
+        except Exception:  # noqa: BLE001 — never surface a stack trace to the client
+            return jsonify(ok=False, msg="could not import the bundle"), 400
+        finally:
+            with contextlib.suppress(OSError):
+                os.remove(tmp)
+        return jsonify(ok=True, project=proj)
+
     # ----- run control -----
     @app.post("/api/p/<slug>/run")
     def run_start(slug):
@@ -303,6 +353,37 @@ def create_app(projects_dir):
         flags = settings.phase_flags(settings.load(projects_dir, slug))
         ok, msg = runner.start(folder, flags=flags)  # empty DB -> index reprocesses everything
         return jsonify(ok=ok, msg=msg, fresh=True), (200 if ok else 409)
+
+    @app.post("/api/p/<slug>/cleanup")
+    def cleanup_project(slug):
+        """LIGHT cleanup (vs the full 'Start over'): drop orphaned rows, requeue errored
+        photos, reclaim space, then re-run the pipeline INCREMENTALLY — already-indexed
+        photos are skipped. Buckets, names, picks and feedback are KEPT."""
+        proj = _require(slug)
+        runner = _runner(slug)
+        if runner.state["running"]:
+            return jsonify(ok=False, msg="stop the current run before cleaning up"), 409
+        c = _conn(slug)
+        removed = {
+            "faces": c.execute("DELETE FROM faces WHERE image_id NOT IN (SELECT id FROM images)").rowcount,
+            "bucket_items": c.execute(
+                "DELETE FROM bucket_items WHERE image_id NOT IN (SELECT id FROM images)"
+            ).rowcount,
+            "picks": c.execute("DELETE FROM picks WHERE image_id NOT IN (SELECT id FROM images)").rowcount,
+            "feedback": c.execute(
+                "DELETE FROM pick_feedback WHERE auto_image_id NOT IN (SELECT id FROM images)"
+            ).rowcount,
+        }
+        requeued = c.execute("UPDATE images SET processed=0 WHERE processed=2").rowcount  # retry errored
+        c.commit()
+        with contextlib.suppress(sqlite3.OperationalError):
+            c.execute("VACUUM")  # reclaim space (no-op if a txn is somehow open)
+        folder = proj["source_folder"]
+        started, msg = False, "cleaned; no source folder to re-run"
+        if folder and os.path.isdir(folder):
+            flags = settings.phase_flags(settings.load(projects_dir, slug))
+            started, msg = runner.start(folder, flags=flags)  # incremental: skips processed=1
+        return jsonify(ok=True, removed=removed, requeued=requeued, run_started=started, msg=msg)
 
     @app.get("/api/p/<slug>/settings")
     def get_settings(slug):

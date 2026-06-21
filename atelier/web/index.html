@@ -47,8 +47,11 @@
             <h1>Projects</h1>
           </div>
           <div class="spacer"></div>
+          <button id="show-archived-btn" class="btn ghost" hidden>Archived</button>
+          <button id="import-project-btn" class="btn ghost">Import…</button>
           <button id="new-project-btn" class="btn">+ New project</button>
         </div>
+        <input id="import-file" type="file" accept=".atelier,.zip,.sqlite,.db" hidden />
         <div id="project-cards" class="proj-grid"></div>
       </div>
     </div>
@@ -135,6 +138,9 @@
           </div>
           <div class="spacer"></div>
           <button id="run-stop" class="btn danger hidden">Stop run</button>
+          <button id="run-cleanup" class="btn ghost hidden" title="Drop orphans, retry errors, re-run incrementally">
+            Clean up &amp; re-run
+          </button>
           <button id="run-fresh" class="btn danger hidden" title="Wipe everything and re-run from scratch">
             Start over…
           </button>

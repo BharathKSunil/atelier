@@ -1,6 +1,7 @@
 """Security regression tests for the local Flask API: CSRF token, origin/host
 allowlist, and export-destination containment."""
 
+import io
 import re
 import time
 
@@ -321,3 +322,76 @@ def test_bucket_delete_cascades_items(app, client, tmp_path):
     left = c.execute("SELECT COUNT(*) FROM bucket_items WHERE bucket_id=?", (bid,)).fetchone()[0]
     c.close()
     assert left == 0  # ON DELETE CASCADE removed the membership rows
+
+
+def test_pin_and_archive_flags_sort_and_persist(app, client, tmp_path):
+    pdir = str(tmp_path / "projects")
+    projects.register_existing(pdir, "a-proj", str(tmp_path))
+    projects.register_existing(pdir, "b-proj", str(tmp_path))
+    tok = _token(client)
+    client.post("/api/projects/b-proj/flags", json={"pinned": True}, headers={"X-Atelier-Token": tok})
+    lst = client.get("/api/projects").get_json()
+    assert lst[0]["slug"] == "b-proj" and lst[0]["pinned"] is True  # pinned sorts first
+    client.post("/api/projects/a-proj/flags", json={"archived": True}, headers={"X-Atelier-Token": tok})
+    a = next(p for p in client.get("/api/projects").get_json() if p["slug"] == "a-proj")
+    assert a["archived"] is True
+
+
+def test_project_export_import_roundtrip(app, client, tmp_path):
+    pdir = str(tmp_path / "projects")
+    projects.register_existing(pdir, "demo", str(tmp_path))
+    c = db.connect(projects.db_path(pdir, "demo"))
+    c.execute("INSERT INTO images(id, path, processed) VALUES(1,'/a.jpg',1)")
+    c.execute("INSERT INTO buckets(name, color, created_at) VALUES('Keepers','#fff',0)")
+    c.commit()
+    c.close()
+    tok = _token(client)
+    r = client.get("/api/projects/demo/export")
+    assert r.status_code == 200 and r.data[:2] == b"PK"  # a zip
+    imp = client.post(
+        "/api/projects/import",
+        data={"file": (io.BytesIO(r.data), "demo.atelier")},
+        content_type="multipart/form-data",
+        headers={"X-Atelier-Token": tok},
+    )
+    body = imp.get_json()
+    assert imp.status_code == 200 and body["ok"]
+    new_slug = body["project"]["slug"]
+    assert new_slug != "demo"  # adopted under a fresh slug
+    c2 = db.connect(projects.db_path(pdir, new_slug))
+    assert c2.execute("SELECT COUNT(*) FROM images").fetchone()[0] == 1
+    assert c2.execute("SELECT COUNT(*) FROM buckets WHERE name='Keepers'").fetchone()[0] == 1
+    c2.close()
+
+
+def test_import_rejects_non_atelier_db(app, client, tmp_path):
+    tok = _token(client)
+    junk = io.BytesIO(b"not a database at all")
+    r = client.post(
+        "/api/projects/import",
+        data={"file": (junk, "junk.sqlite")},
+        content_type="multipart/form-data",
+        headers={"X-Atelier-Token": tok},
+    )
+    assert r.status_code == 400 and r.get_json()["ok"] is False
+
+
+def test_cleanup_purges_orphans_and_requeues_errors(app, client, tmp_path):
+    pdir = str(tmp_path / "projects")
+    projects.register_existing(pdir, "demo", str(tmp_path / "gone"))  # missing folder -> no re-run
+    c = db.connect(projects.db_path(pdir, "demo"))
+    c.execute("INSERT INTO images(id, path, processed) VALUES(1,'/a.jpg',1)")
+    c.execute("INSERT INTO images(id, path, processed) VALUES(2,'/b.jpg',2)")  # errored
+    c.commit()  # close the txn so the next PRAGMA takes effect
+    c.execute("PRAGMA foreign_keys=OFF")  # plant an orphan the FK would otherwise block
+    c.execute("INSERT INTO faces(id, image_id) VALUES(1,1)")
+    c.execute("INSERT INTO faces(id, image_id) VALUES(2,999)")
+    c.commit()
+    c.close()
+    tok = _token(client)
+    r = client.post("/api/p/demo/cleanup", headers={"X-Atelier-Token": tok}).get_json()
+    assert r["ok"] and r["removed"]["faces"] == 1 and r["requeued"] == 1 and r["run_started"] is False
+    c = db.connect(projects.db_path(pdir, "demo"))
+    assert c.execute("SELECT COUNT(*) FROM faces").fetchone()[0] == 1  # orphan removed
+    assert c.execute("SELECT processed FROM images WHERE id=2").fetchone()[0] == 0  # errored requeued
+    c.close()

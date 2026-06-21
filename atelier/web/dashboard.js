@@ -2,6 +2,8 @@
 import { api, post, del, escapeHtml, toast } from "./api.js";
 import { confirmDialog } from "./dialog.js";
 
+let showArchived = false;
+
 export async function renderDashboard() {
   const wrap = document.getElementById("project-cards");
   wrap.innerHTML = `<p class="muted">Loading…</p>`;
@@ -13,13 +15,25 @@ export async function renderDashboard() {
       Make sure Atelier is running, then reload.</div>`;
     return;
   }
+  const archivedCount = projects.filter((p) => p.archived).length;
+  const archBtn = document.getElementById("show-archived-btn");
+  if (archBtn) {
+    archBtn.hidden = archivedCount === 0 && !showArchived;
+    archBtn.classList.toggle("on", showArchived);
+    archBtn.textContent = showArchived ? "← Active" : `Archived (${archivedCount})`;
+  }
+  const visible = projects.filter((p) => (showArchived ? p.archived : !p.archived));
   if (!projects.length) {
     wrap.innerHTML = `<div class="empty"><div class="big">No projects yet</div>
       Create one to index a folder of photos.</div>`;
     return;
   }
+  if (!visible.length) {
+    wrap.innerHTML = `<div class="empty"><div class="big">${showArchived ? "No archived projects" : "Everything archived"}</div></div>`;
+    return;
+  }
   wrap.innerHTML = "";
-  projects.forEach((p, i) => {
+  visible.forEach((p, i) => {
     const s = p.stats || {};
     const cover = (p.cover || []).length
       ? `<div class="cover">${p.cover
@@ -31,12 +45,12 @@ export async function renderDashboard() {
           .join("")}</div>`
       : `<div class="cover empty">${p.running ? "indexing…" : "no photos yet"}</div>`;
     const card = document.createElement("div");
-    card.className = "proj-card";
+    card.className = `proj-card${p.pinned ? " pinned" : ""}`;
     card.style.animationDelay = `${i * 60}ms`;
     card.innerHTML = `
       ${cover}
       <div class="proj-body">
-        <h3>${escapeHtml(p.name)}</h3>
+        <h3>${p.pinned ? `<span class="pin-dot" title="Pinned">★</span> ` : ""}${escapeHtml(p.name)}</h3>
         <div class="proj-path" title="${escapeHtml(p.source_folder)}">${escapeHtml(p.source_folder)}</div>
         <div class="proj-stats">
           <div><b>${s.persons || 0}</b>people</div>
@@ -45,11 +59,30 @@ export async function renderDashboard() {
         </div>
         <div class="proj-foot">
           ${p.running ? `<span class="pill run">● indexing</span>` : `<span class="pill">${s.faces || 0} faces</span>`}
-          <button class="del">Delete</button>
+          <span class="spacer"></span>
+          <button class="ic pin ${p.pinned ? "on" : ""}" title="${p.pinned ? "Unpin" : "Pin to top"}">★</button>
+          <button class="ic export" title="Export portable copy">⤓</button>
+          <button class="ic arch" title="${p.archived ? "Unarchive" : "Archive"}">▣</button>
+          <button class="del" title="Delete project">Delete</button>
         </div>
       </div>`;
     card.onclick = (e) => {
-      if (!e.target.classList.contains("del")) location.hash = `#/p/${p.slug}/review`;
+      if (!e.target.closest("button")) location.hash = `#/p/${p.slug}/review`;
+    };
+    const flag = async (patch) => {
+      try {
+        await post(`/api/projects/${p.slug}/flags`, patch);
+        renderDashboard();
+      } catch {
+        toast("Could not update project", true);
+      }
+    };
+    card.querySelector(".pin").onclick = (e) => (e.stopPropagation(), flag({ pinned: !p.pinned }));
+    card.querySelector(".arch").onclick = (e) => (e.stopPropagation(), flag({ archived: !p.archived }));
+    card.querySelector(".export").onclick = (e) => {
+      e.stopPropagation();
+      window.location.href = `/api/projects/${p.slug}/export`;
+      toast(`Exporting “${p.name}”…`);
     };
     card.querySelector(".del").onclick = async (e) => {
       e.stopPropagation();
@@ -71,6 +104,25 @@ export async function renderDashboard() {
     };
     wrap.appendChild(card);
   });
+}
+
+// ---- import a portable project bundle ----
+async function importProject(e) {
+  const file = e.target.files && e.target.files[0];
+  e.target.value = "";
+  if (!file) return;
+  toast(`Importing “${file.name}”…`);
+  const fd = new FormData();
+  fd.append("file", file);
+  let j;
+  try {
+    j = await api("/api/projects/import", { method: "POST", body: fd, timeout: 120000 });
+  } catch {
+    return toast("Import failed — is it an Atelier export?", true);
+  }
+  if (!j.ok) return toast(j.msg || "Import failed", true);
+  toast(`Imported “${j.project.name}”`);
+  renderDashboard();
 }
 
 // ---- new project modal ----
@@ -119,6 +171,14 @@ const openM = () => {
 };
 const closeM = () => modal().classList.add("hidden");
 document.getElementById("new-project-btn").addEventListener("click", openM);
+document.getElementById("show-archived-btn").addEventListener("click", () => {
+  showArchived = !showArchived;
+  renderDashboard();
+});
+document.getElementById("import-project-btn").addEventListener("click", () => {
+  document.getElementById("import-file").click();
+});
+document.getElementById("import-file").addEventListener("change", importProject);
 document.getElementById("np-cancel").addEventListener("click", closeM);
 document.getElementById("np-cancel-x").addEventListener("click", closeM);
 modal().addEventListener("click", (e) => {
