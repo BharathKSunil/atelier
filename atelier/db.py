@@ -260,6 +260,25 @@ MIGRATIONS = [
             "ALTER TABLE images ADD COLUMN gaze_frac REAL",  # fraction making eye contact
         ],
     ),
+    # v13 — P1 light / color / focus signals. Per-image scalars computed in the score
+    # phase from the stored thumbnails (no originals re-read); bg_sharpness_raw is the
+    # one exception, measured in the index phase (needs the full frame) and populated
+    # on the next re-index. faces.face_exposure caches the per-face skin brightness.
+    (
+        13,
+        [
+            "ALTER TABLE faces ADD COLUMN face_exposure REAL",  # per-face skin brightness [0,1]
+            "ALTER TABLE images ADD COLUMN highlight_frac REAL",  # blown-highlight area
+            "ALTER TABLE images ADD COLUMN shadow_frac REAL",  # crushed-shadow area
+            "ALTER TABLE images ADD COLUMN contrast REAL",  # tonal spread
+            "ALTER TABLE images ADD COLUMN color_cast REAL",  # global color cast (0=neutral)
+            "ALTER TABLE images ADD COLUMN hue_var REAL",  # hue scatter (tempers colorfulness)
+            "ALTER TABLE images ADD COLUMN horizon_tilt REAL",  # Dutch tilt (0=level)
+            "ALTER TABLE images ADD COLUMN skin_exposure REAL",  # subject/face exposure
+            "ALTER TABLE images ADD COLUMN bg_sharpness_raw REAL",  # background acutance (index)
+            "ALTER TABLE images ADD COLUMN bokeh REAL",  # subject-vs-bg sharpness
+        ],
+    ),
 ]
 
 SCHEMA_VERSION = max((v for v, _ in MIGRATIONS), default=0)

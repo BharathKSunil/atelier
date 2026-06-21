@@ -28,6 +28,23 @@ def _pad_crop(pil_img, box, pad=0.4):
     return pil_img.crop((cx1, cy1, cx2, cy2)).convert("RGB")
 
 
+def _bg_sharpness(gray_full, boxes):
+    """Laplacian variance of the frame with face regions EXCLUDED (not masked, so no
+    boundary edge artifact) — the background acutance behind the subject. Pairs with
+    per-face sharpness to score subject-vs-background focus (bokeh / focus-miss)."""
+    g = np.asarray(gray_full, dtype=np.float64)
+    if g.ndim != 2 or min(g.shape) < 3:
+        return None
+    lap = g[:-2, 1:-1] + g[2:, 1:-1] + g[1:-1, :-2] + g[1:-1, 2:] - 4.0 * g[1:-1, 1:-1]
+    bg = np.ones(lap.shape, dtype=bool)
+    for x1, y1, x2, y2 in boxes:  # lap is g[1:-1,1:-1] -> shift box by 1px
+        ix1, iy1 = max(0, int(x1) - 1), max(0, int(y1) - 1)
+        ix2, iy2 = min(lap.shape[1], int(x2)), min(lap.shape[0], int(y2))
+        if ix2 > ix1 and iy2 > iy1:
+            bg[iy1:iy2, ix1:ix2] = False
+    return float(lap[bg].var()) if int(bg.sum()) >= 16 else None
+
+
 def _crop_full(full_img, box, scale):
     """Map a box in analysis coords back to original coords and crop full-res."""
     x1, y1, x2, y2 = (v / scale for v in box)
@@ -152,11 +169,12 @@ def main():
                     )
                 )
 
+            bgsharp = _bg_sharpness(gray_full, [(fr[0], fr[1], fr[2], fr[3]) for fr in face_rows])
             cur.execute(
                 """UPDATE images SET file_size=?, width=?, height=?, taken_at=?, exif_time=?,
                    sub_sec=?, camera=?, orientation=?, global_embedding=?, global_sharpness=?,
                    global_sharpness_raw=?, exposure_score=?, thumbnail=?, face_count=?,
-                   processed=1, error_msg=NULL WHERE id=?""",
+                   bg_sharpness_raw=?, processed=1, error_msg=NULL WHERE id=?""",
                 (
                     os.path.getsize(path),
                     W,
@@ -172,6 +190,7 @@ def main():
                     expo,
                     ibuf.getvalue(),
                     len(face_rows),
+                    bgsharp,
                     iid,
                 ),
             )

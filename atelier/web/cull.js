@@ -377,6 +377,7 @@ function renderInspector() {
     <div class="insp-sec">
       <div class="insp-head">Frame quality <b>${faces.length ? `${faces.length} 𝍌` : ""}</b></div>
       ${fracChips(h)}
+      ${lightFlags(h)}
       <div class="insp-bars">
         ${qbar("Group / print", h.print_score)}
         ${qbar("Moment", h.moment_score)}
@@ -644,6 +645,20 @@ function fracChips(h) {
     <span class="frac">${c(h.front_frac)} facing</span>
     ${h.gaze_frac != null ? `<span class="frac">${c(h.gaze_frac)} eye contact</span>` : ""}
   </div>`;
+}
+
+// light / colour / focus flags — surface ONLY what's actually a problem (plus bokeh
+// as a positive). Thresholds mirror config.py (HIGHLIGHT_WARN / SHADOW_WARN / …).
+function lightFlags(h) {
+  const f = [];
+  const bad = (v, t) => v != null && v > t;
+  if (bad(h.highlight_frac, 0.08)) f.push(`<span class="flag warn">blown highlights</span>`);
+  if (bad(h.shadow_frac, 0.18)) f.push(`<span class="flag warn">crushed shadows</span>`);
+  if (bad(h.color_cast, 0.5)) f.push(`<span class="flag warn">colour cast</span>`);
+  if (bad(h.horizon_tilt, 0.5)) f.push(`<span class="flag warn">tilted</span>`);
+  if (h.skin_exposure != null && h.skin_exposure < 0.4) f.push(`<span class="flag warn">dim subject</span>`);
+  if (bad(h.bokeh, 0.65)) f.push(`<span class="flag good">bokeh</span>`);
+  return f.length ? `<div class="insp-flags">${f.join("")}</div>` : "";
 }
 
 function feedbackRow(ptype) {

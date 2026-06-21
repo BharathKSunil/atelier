@@ -86,6 +86,15 @@ GAZE_AWAY_FALLOFF = 0.6  # mean eyeLook* blendshape drive that drives gaze to 0
 DUCHENNE_BASE = 0.6  # mouth-only smile multiplier; full cheek-raise lifts it to 1.0
 GAZE_THR = 0.5  # eye-contact tag threshold ("6/8 eye contact")
 
+# P1 light / color / focus signals (pure numpy over stored thumbnails).
+CAST_FALLOFF = 40.0  # mean opponent bias (0..255) that reads as a full color cast
+HORIZON_MIN_CONC = 0.35  # min edge-orientation concentration to trust a Dutch-tilt
+HORIZON_MAX_TILT_DEG = 12.0  # deg of tilt that saturates the horizon signal
+HIGHLIGHT_WARN = 0.08  # blown-highlight area fraction that raises a flag
+SHADOW_WARN = 0.18  # crushed-shadow area fraction that raises a flag
+CAST_WARN = 0.5  # color-cast value that raises a flag
+TILT_WARN = 0.5  # horizon-tilt value that raises a flag
+
 # Group pick: eyes stay important. eyes_term = a blend of the area-weighted mean
 # (a tiny background blink can't dominate) and the worst eye (a foreground blink hurts),
 # minus a per-straggler penalty. Continuous blur floor replaces the old ×0.25 step.

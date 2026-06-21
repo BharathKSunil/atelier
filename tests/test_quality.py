@@ -61,7 +61,7 @@ def test_blur_floor_is_continuous_not_a_cliff():
     a, b = quality.blur_floor(0.149), quality.blur_floor(0.151)
     assert abs(a - b) < 0.05  # no step at the old disqualify point
     assert quality.blur_floor(0.02) < quality.blur_floor(0.5)  # heavier when soft
-    assert 0.0 < quality.blur_floor(0.02) and quality.blur_floor(0.9) <= 1.0
+    assert quality.blur_floor(0.02) > 0.0 and quality.blur_floor(0.9) <= 1.0
 
 
 def test_print_score_blur_floor_demotes_soft():
@@ -189,3 +189,72 @@ def test_genuine_smile_rewards_cheek_raise():
     assert real > forced
     assert quality.genuine_smile(0.0, 0.0, 0.9, 0.9) == 0.0  # no mouth smile -> not a smile
     assert 0.0 <= forced <= 1.0 and 0.0 <= real <= 1.0
+
+
+# ---------------------------------------------------------------- P1 light/colour/focus
+def test_highlight_and_shadow_frac():
+    assert quality.highlight_frac(np.full((8, 8), 255, np.uint8)) == 1.0
+    assert quality.highlight_frac(np.full((8, 8), 128, np.uint8)) == 0.0
+    assert quality.shadow_frac(np.zeros((8, 8), np.uint8)) == 1.0
+    assert quality.shadow_frac(np.full((8, 8), 128, np.uint8)) == 0.0
+
+
+def test_global_contrast():
+    flat = quality.global_contrast(np.full((8, 8), 128, np.uint8))
+    cb = np.indices((8, 8)).sum(0) % 2 * 255
+    assert flat == 0.0
+    assert quality.global_contrast(cb.astype(np.uint8)) > flat
+
+
+def test_color_cast_only_on_neutrals():
+    gray = np.full((8, 8, 3), 128, np.uint8)
+    cast = gray.copy()
+    cast[..., 1] = 150  # the *neutral* pixels tinted green = a white-balance cast
+    saturated = gray.copy()
+    saturated[..., 1] = 230  # a vivid green (high-sat) is NOT a cast -> ignored
+    assert quality.color_cast(gray) == 0.0
+    assert quality.color_cast(cast) > 0.2
+    assert quality.color_cast(saturated) == 0.0  # saturated colour is not a WB error
+
+
+def test_hue_variance_single_vs_mixed():
+    one = np.zeros((16, 16, 3), np.uint8)
+    one[..., 0] = 220  # all red
+    mixed = np.random.default_rng(1).integers(0, 255, (16, 16, 3), dtype=np.uint8)
+    assert quality.hue_variance(one) < quality.hue_variance(mixed)
+    assert quality.hue_variance(np.full((8, 8, 3), 128, np.uint8)) == 0.0  # gray -> no hue
+
+
+def test_skin_exposure_agg():
+    assert quality.skin_exposure_agg([]) is None
+    assert quality.skin_exposure_agg([None]) is None
+    one_dim = quality.skin_exposure_agg([0.9, 0.2])  # a dim face drags it
+    assert one_dim < 0.9
+
+
+def test_bokeh_ratio():
+    assert quality.bokeh_ratio(None, 100) is None
+    assert abs(quality.bokeh_ratio(300, 300) - 0.5) < 1e-3  # equal -> mid
+    assert quality.bokeh_ratio(900, 100) > 0.8  # sharp subject, soft bg
+    assert quality.bokeh_ratio(100, 900) < 0.2  # focus missed
+
+
+def test_area_weighted_sharpness_ignores_tiny_face():
+    # big sharp face + tiny soft face -> aggregate stays high
+    agg = quality.area_weighted_sharpness([0.9, 0.1], [40000.0, 100.0])
+    assert agg > 0.8
+    assert quality.area_weighted_sharpness([], []) is None
+
+
+def _tilted_edge(deg, n=64):
+    yy, xx = np.mgrid[0:n, 0:n].astype(float)
+    t = np.radians(deg)
+    return ((np.sin(t) * xx - np.cos(t) * yy > 0) * 255).astype(np.uint8)
+
+
+def test_horizon_tilt_level_vs_tilted_and_gated():
+    assert quality.horizon_tilt(_tilted_edge(0)) < 0.2  # horizontal -> level
+    assert quality.horizon_tilt(_tilted_edge(90)) < 0.2  # vertical -> level
+    assert quality.horizon_tilt(_tilted_edge(8)) > quality.horizon_tilt(_tilted_edge(0))
+    busy = np.random.default_rng(2).integers(0, 255, (64, 64), dtype=np.uint8)
+    assert quality.horizon_tilt(busy) == 0.0  # no dominant axis -> gated to 0

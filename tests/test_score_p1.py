@@ -20,12 +20,15 @@ def _jpeg():
 def _seed(path, thumb=True):
     conn = db.connect(path)
     conn.execute(
-        """INSERT INTO images(id, path, processed, width, height, global_sharpness_raw, exposure_score)
-           VALUES(1, '/a.jpg', 1, 1000, 800, 300, 0.8)"""
+        """INSERT INTO images(id, path, processed, width, height, global_sharpness_raw, exposure_score,
+                              bg_sharpness_raw, thumbnail)
+           VALUES(1, '/a.jpg', 1, 1000, 800, 300, 0.8, 120, ?)""",
+        (_jpeg(),),
     )
     conn.execute(
-        """INSERT INTO faces(id, image_id, face_index, thumbnail, face_sharpness, bbox_x1, bbox_y1, bbox_x2, bbox_y2)
-           VALUES(1, 1, 0, ?, 0.7, 100, 100, 300, 300)""",
+        """INSERT INTO faces(id, image_id, face_index, thumbnail, face_sharpness, face_sharpness_raw,
+                             bbox_x1, bbox_y1, bbox_x2, bbox_y2)
+           VALUES(1, 1, 0, ?, 0.7, 480, 100, 100, 300, 300)""",
         (_jpeg() if thumb else None,),
     )
     conn.commit()
@@ -60,9 +63,17 @@ def test_score_stores_p1_signals(tmp_path, monkeypatch):
     assert f["genuine_smile"] > 0.7  # mouth + cheek co-activation
     assert f["frontality"] == 1.0  # identity transform -> frontal
     assert abs(f["yaw"]) < 1e-6
-    im = conn.execute("SELECT gaze_frac, eyes_open_frac FROM images WHERE id=1").fetchone()
+    im = conn.execute(
+        """SELECT gaze_frac, eyes_open_frac, highlight_frac, shadow_frac, contrast, color_cast,
+                  skin_exposure, bokeh FROM images WHERE id=1"""
+    ).fetchone()
     assert im["gaze_frac"] == 1.0  # the one face makes eye contact
     assert im["eyes_open_frac"] == 1.0
+    # v13 light/focus signals over the flat gray thumbnail
+    assert im["highlight_frac"] == 0.0 and im["shadow_frac"] == 0.0  # nothing blown/crushed
+    assert im["contrast"] == 0.0 and im["color_cast"] == 0.0  # flat, neutral
+    assert im["skin_exposure"] is not None
+    assert abs(im["bokeh"] - 0.8) < 1e-3  # 480 / (480 + 120)
     conn.close()
 
 

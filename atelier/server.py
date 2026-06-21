@@ -752,6 +752,7 @@ def create_app(projects_dir):
                  taken_at, sub_sec, face_count,
                  moment_score, cohesion, joy, comp_score,
                  eyes_open_frac, smile_frac, front_frac, gaze_frac, subject_size,
+                 highlight_frac, shadow_frac, color_cast, horizon_tilt, skin_exposure, bokeh,
                  EXISTS(SELECT 1 FROM bucket_items WHERE image_id=images.id
                         AND bucket_id=(SELECT id FROM buckets WHERE is_default=1 ORDER BY id LIMIT 1)) AS is_print
                FROM images WHERE series_id=?
@@ -801,6 +802,7 @@ def create_app(projects_dir):
                  i.taken_at, i.sub_sec, i.face_count,
                  i.moment_score, i.cohesion, i.joy, i.comp_score, i.eyes_open_frac, i.smile_frac, i.front_frac,
                  i.gaze_frac, i.subject_size,
+                 i.highlight_frac, i.shadow_frac, i.color_cast, i.horizon_tilt, i.skin_exposure, i.bokeh,
                  EXISTS(SELECT 1 FROM bucket_items WHERE image_id=i.id
                         AND bucket_id=(SELECT id FROM buckets WHERE is_default=1 ORDER BY id LIMIT 1)) AS is_print
                FROM images i

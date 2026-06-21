@@ -98,8 +98,9 @@ def main():
         q = quality.face_quality(sharp, bright, eye, frontal, sm)
         conn.execute(
             """UPDATE faces SET eye_open=?, smile=?, frontality=?, quality_score=?,
-               eye_left=?, eye_right=?, yaw=?, pitch=?, roll=?, gaze=?, genuine_smile=? WHERE id=?""",
-            (eye, sm, frontal, q, eye_l, eye_r, yaw, pitch, roll, gaze, genuine, f["id"]),
+               eye_left=?, eye_right=?, yaw=?, pitch=?, roll=?, gaze=?, genuine_smile=?,
+               face_exposure=? WHERE id=?""",
+            (eye, sm, frontal, q, eye_l, eye_r, yaw, pitch, roll, gaze, genuine, bright, f["id"]),
         )
     conn.commit()
 
@@ -117,12 +118,14 @@ def main():
     #      The SAME per-face inputs feed every criterion; only the weighting differs,
     #      so a group photo stays eyes-strict while 'moment' lets a great frame win. ----
     for im in conn.execute(
-        """SELECT id, global_sharpness, global_sharpness_raw, exposure_score, thumbnail, width, height
+        """SELECT id, global_sharpness, global_sharpness_raw, exposure_score, thumbnail, width, height,
+                  bg_sharpness_raw
                FROM images WHERE processed=1"""
     ).fetchall():
         fr = list(
             conn.execute(
-                """SELECT eye_open, smile, frontality, gaze, bbox_x1, bbox_y1, bbox_x2, bbox_y2
+                """SELECT eye_open, smile, frontality, gaze, face_exposure, face_sharpness_raw,
+                          bbox_x1, bbox_y1, bbox_x2, bbox_y2
                        FROM faces WHERE image_id=?""",
                 (im["id"],),
             )
@@ -150,18 +153,37 @@ def main():
         # to the stored normalized value for pre-Phase-1 rows without raw.
         raw = im["global_sharpness_raw"]
         gs = quality.squash_sharpness(raw) if raw is not None else (im["global_sharpness"] or 0.0)
-        rgb = None
+        rgb = gray = None
         if im["thumbnail"]:
             try:
-                rgb = np.asarray(Image.open(io.BytesIO(im["thumbnail"])).convert("RGB"))
+                pil = Image.open(io.BytesIO(im["thumbnail"]))
+                rgb = np.asarray(pil.convert("RGB"))
+                gray = np.asarray(pil.convert("L"))
             except Exception:
-                rgb = None
+                rgb = gray = None
         px = float((im["width"] or 1) * (im["height"] or 1))
         subject_size = (max((f["area"] for f in faces), default=0.0) / px) if faces else None
+        # P1 light / color / focus signals (over the stored thumbnail + per-face stats)
+        highlight = quality.highlight_frac(gray) if gray is not None else None
+        shadow = quality.shadow_frac(gray) if gray is not None else None
+        contrast = quality.global_contrast(gray) if gray is not None else None
+        tilt = quality.horizon_tilt(gray) if gray is not None else None
+        cast = quality.color_cast(rgb) if rgb is not None else None
+        hue_var = quality.hue_variance(rgb) if rgb is not None else None
+        skin_exp = quality.skin_exposure_agg([r["face_exposure"] for r in fr])
+        # bokeh: the largest (subject) face's sharpness vs the background acutance
+        subj_sharp = None
+        if fr:
+            subj = max(fr, key=lambda r: quality.face_area(
+                (r["bbox_x1"] or 0, r["bbox_y1"] or 0, r["bbox_x2"] or 0, r["bbox_y2"] or 0)))
+            subj_sharp = subj["face_sharpness_raw"]
+        bokeh = quality.bokeh_ratio(subj_sharp, im["bg_sharpness_raw"])
         conn.execute(
             """UPDATE images SET global_sharpness=?, aesthetic_score=?, candid_score=?, print_score=?,
                moment_score=?, cohesion=?, joy=?, comp_score=?,
-               eyes_open_frac=?, smile_frac=?, front_frac=?, gaze_frac=?, eyes_min=?, subject_size=? WHERE id=?""",
+               eyes_open_frac=?, smile_frac=?, front_frac=?, gaze_frac=?, eyes_min=?, subject_size=?,
+               highlight_frac=?, shadow_frac=?, contrast=?, color_cast=?, hue_var=?, horizon_tilt=?,
+               skin_exposure=?, bokeh=? WHERE id=?""",
             (
                 gs,
                 quality.aesthetic_proxy(rgb, gs, ex),
@@ -177,6 +199,14 @@ def main():
                 quality.fraction_at_least(gazes, config.GAZE_THR),
                 (min(eyes) if eyes else None),
                 subject_size,
+                highlight,
+                shadow,
+                contrast,
+                cast,
+                hue_var,
+                tilt,
+                skin_exp,
+                bokeh,
                 im["id"],
             ),
         )

@@ -613,6 +613,28 @@ h3 {
   color: #e7b9a6;
   border-color: #6e3a2c;
 }
+.insp-flags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+.flag {
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 999px;
+  padding: 3px 9px;
+}
+.flag.warn {
+  color: #e7b9a6;
+  background: rgba(110, 58, 44, 0.18);
+  border: 1px solid #6e3a2c;
+}
+.flag.good {
+  color: #bfe0c2;
+  background: rgba(58, 110, 70, 0.18);
+  border: 1px solid #3a6e46;
+}
 .insp-bars {
   display: flex;
   flex-direction: column;

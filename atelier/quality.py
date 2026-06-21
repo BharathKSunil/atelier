@@ -150,6 +150,119 @@ def genuine_smile(smile_left, smile_right, cheek_left, cheek_right):
     return float(np.clip(sm * (config.DUCHENNE_BASE + (1.0 - config.DUCHENNE_BASE) * ch), 0.0, 1.0))
 
 
+# ------------------------------------------------- P1: light / color / focus signals
+# All pure numpy over already-stored pixels (the image thumbnail, the per-face thumbs,
+# and the raw sharpness values) — no originals re-read, no new model. Each is a plain
+# scalar the score phase stores; the inspector surfaces the bad ones as flags.
+def highlight_frac(gray):
+    """Fraction of near-white (blown) pixels. gray in [0,255]."""
+    g = np.asarray(gray, dtype=np.float64)
+    return float((g >= 250).mean()) if g.size else 0.0
+
+
+def shadow_frac(gray):
+    """Fraction of crushed-black pixels."""
+    g = np.asarray(gray, dtype=np.float64)
+    return float((g <= 4).mean()) if g.size else 0.0
+
+
+def global_contrast(gray):
+    """Tonal spread = std of luminance, normalized. Low = flat/hazy. [0,1]."""
+    g = np.asarray(gray, dtype=np.float64)
+    return float(np.clip(g.std() / 128.0, 0.0, 1.0)) if g.size else 0.0
+
+
+def color_cast(rgb):
+    """Residual white-balance cast [0,1] (0 = neutral). Measured ONLY on low-saturation
+    mid-luma pixels — the ones that *should* be gray — so a deliberately warm/golden
+    frame (saturated warmth) doesn't false-flag; only a tint on the neutrals counts."""
+    a = np.asarray(rgb, dtype=np.float64)
+    if a.ndim != 3 or a.shape[2] < 3 or a.size == 0:
+        return 0.0
+    r, g, b = a[..., 0], a[..., 1], a[..., 2]
+    luma = 0.299 * r + 0.587 * g + 0.114 * b
+    neutral = ((a.max(-1) - a.min(-1)) < 25) & (luma > 60) & (luma < 200)
+    if int(neutral.sum()) < 20:
+        return 0.0
+    rg = float((r[neutral] - g[neutral]).mean())
+    yb = float((0.5 * (r[neutral] + g[neutral]) - b[neutral]).mean())
+    return float(np.clip(np.hypot(rg, yb) / config.CAST_FALLOFF, 0.0, 1.0))
+
+
+def hue_variance(rgb):
+    """Circular variance of hue over colorful pixels [0,1]. Low = coherent palette,
+    high = scattered. Tempers raw colorfulness so a garish frame isn't over-rewarded."""
+    a = np.asarray(rgb, dtype=np.float64) / 255.0
+    if a.ndim != 3 or a.shape[2] < 3 or a.size == 0:
+        return 0.0
+    r, g, b = a[..., 0], a[..., 1], a[..., 2]
+    chroma = a.max(-1) - a.min(-1)
+    mask = chroma > 0.15  # enough saturation for a meaningful hue
+    if int(mask.sum()) < 10:
+        return 0.0
+    alpha = 0.5 * (2 * r - g - b)
+    beta = (np.sqrt(3.0) / 2.0) * (g - b)
+    hue = np.arctan2(beta, alpha)[mask]
+    resultant = float(np.hypot(np.cos(hue).mean(), np.sin(hue).mean()))
+    return float(np.clip(1.0 - resultant, 0.0, 1.0))
+
+
+def skin_exposure_agg(face_exposures):
+    """Subject (skin-tone) exposure: worst-blended mean of per-face exposure scores.
+    None if no faces. An underexposed subject reads low even when global exposure is
+    fine (backlit/spotlit scenes)."""
+    v = [x for x in face_exposures if x is not None]
+    if not v:
+        return None
+    return float(0.5 * min(v) + 0.5 * (sum(v) / len(v)))
+
+
+def bokeh_ratio(face_sharp_raw, bg_sharp_raw):
+    """Subject-vs-background sharpness [0,1]: high when the face is sharp and the
+    background soft (intentional bokeh / good focus), ~0.5 when equal, low on a focus
+    miss. None if either input is missing."""
+    if face_sharp_raw is None or bg_sharp_raw is None:
+        return None
+    f = max(0.0, float(face_sharp_raw))
+    b = max(0.0, float(bg_sharp_raw))
+    return float(f / (f + b + 1e-6))
+
+
+def area_weighted_sharpness(sharps, areas):
+    """Area-weighted mean of per-face sharpness so a tiny background face can't drag
+    the group sharpness aggregate. None if no faces."""
+    s = [float(x) if x is not None else 0.0 for x in sharps]
+    if not s:
+        return None
+    w = area_weights(areas)
+    return float(np.dot(np.asarray(s, dtype=np.float64), w)) if len(w) else float(np.mean(s))
+
+
+def horizon_tilt(gray):
+    """Dutch-tilt [0,1] (0 = level). Weighted dominant strong-edge orientation, but
+    GATED: returns 0 when no single axis dominates (busy scene), so it never invents a
+    tilt. Operates on the downscaled gray thumbnail."""
+    g = np.asarray(gray, dtype=np.float64)
+    if g.ndim != 2 or min(g.shape) < 16:
+        return 0.0
+    gy = g[2:, 1:-1] - g[:-2, 1:-1]
+    gx = g[1:-1, 2:] - g[1:-1, :-2]
+    mag = np.hypot(gx, gy)
+    m = mag > (mag.mean() + mag.std())  # strong edges only
+    if int(m.sum()) < 32:
+        return 0.0
+    edge = (np.degrees(np.arctan2(gy[m], gx[m])) + 90.0) % 180.0  # edge orientation
+    w = mag[m]
+    rad2 = np.radians(2.0 * edge)  # double-angle: axial (0≡180) averaging
+    cc = float(np.average(np.cos(rad2), weights=w))
+    ss = float(np.average(np.sin(rad2), weights=w))
+    if np.hypot(cc, ss) < config.HORIZON_MIN_CONC:  # no dominant axis -> unknown
+        return 0.0
+    dom = (np.degrees(np.arctan2(ss, cc)) / 2.0) % 90.0  # dominant orientation mod 90
+    dev = min(dom, 90.0 - dom)  # distance to nearest level/plumb axis
+    return float(np.clip(dev / config.HORIZON_MAX_TILT_DEG, 0.0, 1.0))
+
+
 def kps_plausible(kps, box):
     """Anatomical sanity on the detector's 5 keypoints [left_eye, right_eye, nose,
     mouth_left, mouth_right] (image coords). Rejects the collapsed/impossible
