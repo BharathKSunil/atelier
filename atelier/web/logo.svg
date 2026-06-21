@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none" role="img" aria-label="Atelier mark">
+  <g stroke="#cda35c" stroke-width="2.6" stroke-linecap="round">
+    <path d="M10 20 V10 H20" />
+    <path d="M44 10 H54 V20" />
+    <path d="M54 44 V54 H44" />
+    <path d="M20 54 H10 V44" />
+  </g>
+  <path d="M24 44 L32 20 L40 44" stroke="#efe7d6" stroke-width="3" stroke-linejoin="round" stroke-linecap="round" />
+  <path d="M27.5 36 H36.5" stroke="#efe7d6" stroke-width="3" stroke-linecap="round" />
+  <circle cx="32" cy="20" r="2.6" fill="#cda35c" />
+</svg>

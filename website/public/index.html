@@ -1,0 +1,496 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Atelier — local-first photo culling for big photo libraries</title>
+    <meta
+      name="description"
+      content="Atelier groups your photos by person and picks the best frame of every burst — without ever touching an original. For photographers and for anyone with a huge photo library: weddings, a year of family photos, a whole trip. Fully local: SQLite, no cloud."
+    />
+    <meta name="theme-color" content="#14110d" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Atelier — local-first photo culling" />
+    <meta
+      property="og:description"
+      content="Cull by person. Pick the best frame of every burst. Never touch an original. For photographers and anyone with a giant photo library. Runs entirely on your machine."
+    />
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..900;1,9..144,300..900&family=Hanken+Grotesk:wght@300..800&family=JetBrains+Mono:wght@400;500;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="favicon-16.png" />
+    <link rel="apple-touch-icon" href="apple-touch-icon.png" />
+    <link rel="manifest" href="site.webmanifest" />
+    <link rel="stylesheet" href="css/style.css" />
+  </head>
+  <body>
+    <div class="grain" aria-hidden="true"></div>
+
+    <!-- ───────────────────────── nav ───────────────────────── -->
+    <header class="nav" id="nav">
+      <a class="brand" href="#top" aria-label="Atelier home">
+        <svg class="brand-mark" viewBox="0 0 64 64" width="28" height="28" aria-hidden="true" fill="none">
+          <g stroke="#cda35c" stroke-width="2.6" stroke-linecap="round">
+            <path d="M10 20 V10 H20" />
+            <path d="M44 10 H54 V20" />
+            <path d="M54 44 V54 H44" />
+            <path d="M20 54 H10 V44" />
+          </g>
+          <path
+            d="M24 44 L32 20 L40 44"
+            stroke="#efe7d6"
+            stroke-width="3"
+            stroke-linejoin="round"
+            stroke-linecap="round"
+          />
+          <path d="M27.5 36 H36.5" stroke="#efe7d6" stroke-width="3" stroke-linecap="round" />
+          <circle cx="32" cy="20" r="2.6" fill="#cda35c" />
+        </svg>
+        <span>Atelier</span>
+      </a>
+      <nav class="nav-links" aria-label="Primary">
+        <a href="#why">Why</a>
+        <a href="#how">Workflow</a>
+        <a href="#demo">Live demo</a>
+        <a href="#features">Features</a>
+        <a href="#install">Install</a>
+        <a class="nav-cta" href="https://github.com/bharathksunil/atelier" target="_blank" rel="noopener">GitHub ↗</a>
+      </nav>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <span></span><span></span><span></span>
+      </button>
+    </header>
+
+    <main id="top">
+      <!-- ───────────────────────── hero ───────────────────────── -->
+      <section class="hero">
+        <div class="hero-aperture" aria-hidden="true"></div>
+        <div class="hero-grid">
+          <div class="hero-copy">
+            <p class="eyebrow reveal">Local-first · SQLite · no cloud</p>
+            <h1 class="reveal">
+              Cull by <em>person.</em><br />
+              Keep the <em>best</em> frame<br />
+              of every burst.
+            </h1>
+            <p class="lede reveal">
+              Atelier browses a large local photo library by who's <em>in</em> the photo, then picks the single best
+              frame of each burst — without renaming, moving, or modifying a single original. You don't have to be a
+              pro: if you have <strong>too many photos</strong>, it's for you. Everything stays on your machine.
+            </p>
+            <div class="hero-jobs reveal">
+              <span class="job"
+                ><b>01</b> Group by name — detect &amp; cluster faces, label people, browse their photos.</span
+              >
+              <span class="job"><b>02</b> Best of a burst — score the whole frame, keep the one that's worth it.</span>
+            </div>
+            <div class="hero-actions reveal">
+              <a class="btn btn-gold" href="#demo">Try the live demo ↓</a>
+              <a class="btn btn-ghost" href="#how">See how it works</a>
+            </div>
+            <p class="hero-note reveal">
+              Built for any library too big for the cloud — a wedding, a year of family photos, a whole trip:
+              <strong>20,000+ images, multiple terabytes</strong>, all reviewed on your own machine.
+            </p>
+          </div>
+
+          <!-- decorative contact-sheet strip -->
+          <div class="hero-sheet reveal" aria-hidden="true">
+            <div class="sheet-rail">
+              <div class="sheet-frame" data-seed="vows-1"></div>
+              <div class="sheet-frame pick" data-seed="vows-2"><span class="sheet-star">★</span></div>
+              <div class="sheet-frame" data-seed="vows-3"></div>
+              <div class="sheet-frame dim" data-seed="vows-4"><span class="sheet-x">eyes closed</span></div>
+              <div class="sheet-frame" data-seed="vows-5"></div>
+              <div class="sheet-frame" data-seed="vows-6"></div>
+            </div>
+            <p class="sheet-cap">one burst · 6 frames · <span class="g">1 keeper</span></p>
+          </div>
+        </div>
+      </section>
+
+      <!-- marquee strip -->
+      <div class="marquee" aria-hidden="true">
+        <div class="marquee-track">
+          <span>Non-destructive</span><i>✦</i><span>Group-aware scoring</span><i>✦</i><span>Faces by person</span
+          ><i>✦</i><span>Runs on Apple Silicon</span><i>✦</i><span>SQLite, per project</span><i>✦</i
+          ><span>Loopback only</span><i>✦</i><span>Non-destructive</span><i>✦</i><span>Group-aware scoring</span><i>✦</i
+          ><span>Faces by person</span><i>✦</i><span>Runs on Apple Silicon</span><i>✦</i><span>SQLite, per project</span
+          ><i>✦</i><span>Loopback only</span><i>✦</i>
+        </div>
+      </div>
+
+      <!-- ───────────────────────── why ───────────────────────── -->
+      <section class="section why" id="why">
+        <div class="section-head reveal">
+          <span class="kicker">The problem</span>
+          <h2>
+            A wedding — or a year of phone photos — is <em>thousands of frames.</em><br />You want the
+            <em>few</em> worth keeping.
+          </h2>
+        </div>
+        <div class="why-grid">
+          <article class="why-card reveal">
+            <div class="why-num">TB</div>
+            <h3>Too big to upload</h3>
+            <p>
+              A shoot, a trip, or a whole family archive can be terabytes of photos and bursts. Pushing that to a web
+              service is a painstaking, days-long task — so Atelier never asks you to. It indexes the folder where it
+              already lives.
+            </p>
+          </article>
+          <article class="why-card reveal">
+            <div class="why-num">∿</div>
+            <h3>Bursts, not photos</h3>
+            <p>
+              You didn't take 6,000 photos — you took 900 moments, six frames each. The job isn't rating every frame;
+              it's finding the one frame per moment where nobody blinked. Atelier groups the burst and scores the whole
+              frame, group-aware.
+            </p>
+          </article>
+          <article class="why-card reveal">
+            <div class="why-num">⌘</div>
+            <h3>Never touch the originals</h3>
+            <p>
+              No renames. No moves. No edits. Your selects live in a per-project SQLite database; export only ever
+              <em>copies</em> a chosen original into a new folder. The library you came in with is the library you leave
+              with.
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <!-- ───────────────────────── how ───────────────────────── -->
+      <section class="section how" id="how">
+        <div class="section-head reveal">
+          <span class="kicker">The pipeline</span>
+          <h2>Four passes, then you <em>browse.</em></h2>
+          <p class="section-sub">
+            Point Atelier at a folder. It indexes once — resumable, offline after the first model download — then you
+            review in the browser at <code>localhost:5050</code>.
+          </p>
+        </div>
+        <ol class="pipeline">
+          <li class="reveal">
+            <span class="ph">Index</span>
+            <h3>Detect &amp; embed</h3>
+            <p>
+              RetinaFace detection + ArcFace 512-d face embeddings, quality-gated and EXIF-upright, plus a DINOv2 scene
+              embedding and full-res sharpness / exposure. Resumable.
+            </p>
+          </li>
+          <li class="reveal">
+            <span class="ph">People</span>
+            <h3>Cluster into persons</h3>
+            <p>
+              HDBSCAN over the face embeddings with a centroid-merge pass turns thousands of faces into a handful of
+              people you can name.
+            </p>
+          </li>
+          <li class="reveal">
+            <span class="ph">Series</span>
+            <h3>Group the bursts</h3>
+            <p>
+              EXIF capture time + scene embedding stitch near-identical frames into a single burst, so the keeper-pick
+              is made across the right set.
+            </p>
+          </li>
+          <li class="reveal">
+            <span class="ph">Score</span>
+            <h3>Pick the keeper</h3>
+            <p>
+              MediaPipe landmarks read eyes / smile / frontality; one blink disqualifies a frame. The best face per
+              person and the best frame per burst fall out.
+            </p>
+          </li>
+        </ol>
+      </section>
+
+      <!-- ───────────────────────── demo ───────────────────────── -->
+      <section class="section demo-section" id="demo">
+        <div class="section-head reveal">
+          <span class="kicker">Live demo · no install</span>
+          <h2>This is the <em>review desk.</em></h2>
+          <p class="section-sub">
+            A faithful, in-browser slice of Atelier's Review&nbsp;/&nbsp;cull view, on sample bursts. Click a frame, or
+            use the keyboard — it responds exactly like the real thing.
+          </p>
+        </div>
+
+        <div
+          class="demo-shell reveal"
+          id="cull"
+          tabindex="0"
+          aria-label="Interactive culling demo. Click to enable keyboard."
+        >
+          <div class="demo-topbar">
+            <div class="demo-title">
+              <svg viewBox="0 0 32 32" width="18" height="18" aria-hidden="true">
+                <circle cx="16" cy="16" r="9" fill="none" stroke="currentColor" stroke-width="1.6" />
+              </svg>
+              Review · <span id="projName">demo · "wedding"</span>
+            </div>
+            <div class="demo-count" id="rvCount">—</div>
+            <div class="demo-kbd-state" id="kbdState" title="Click the desk to control with the keyboard">
+              <span class="dot"></span><span id="kbdLabel">click to focus</span>
+            </div>
+          </div>
+
+          <div class="demo-progress"><i id="rvProgress"></i></div>
+
+          <div class="demo-body">
+            <!-- stage -->
+            <figure class="demo-stage" id="rvStage">
+              <div class="stage-empty">—</div>
+            </figure>
+
+            <!-- inspector -->
+            <aside class="demo-inspector" id="rvInspector"></aside>
+          </div>
+
+          <!-- filmstrip -->
+          <div class="demo-strip" id="rvStrip" role="listbox" aria-label="Burst frames"></div>
+
+          <!-- buckets + actions -->
+          <div class="demo-foot">
+            <div class="demo-buckets" id="rvBuckets"></div>
+            <div class="demo-actions">
+              <button class="btn-mini" id="rvPrev" aria-label="Previous burst">← burst</button>
+              <button class="btn-mini" id="rvStar">☆ Add to print list</button>
+              <button class="btn-mini" id="rvNext" aria-label="Next burst">burst →</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- print-list payoff + key legend -->
+        <div class="demo-aside reveal">
+          <div class="printlist">
+            <div class="printlist-head"><span>★ Print list</span><b id="plCount">0</b></div>
+            <div class="printlist-grid" id="plGrid">
+              <p class="printlist-empty">Star frames in the desk above — your keepers collect here.</p>
+            </div>
+            <p class="printlist-note">
+              In Atelier, <em>Export</em> copies each starred original into <code>./print_exports/</code>. Nothing else
+              moves.
+            </p>
+          </div>
+
+          <div class="keymap">
+            <h4>Keyboard</h4>
+            <ul>
+              <li><kbd>←</kbd><kbd>→</kbd><span>step bursts</span></li>
+              <li><kbd>↑</kbd><kbd>↓</kbd><span>move within the burst</span></li>
+              <li><kbd>Space</kbd><span>★ add / remove from print list</span></li>
+              <li><kbd>G</kbd><kbd>C</kbd><kbd>A</kbd><span>tag Everyone / Candid / Striking</span></li>
+              <li><kbd>1</kbd>–<kbd>9</kbd><span>drop into a bucket</span></li>
+              <li><kbd>X</kbd><span>skip to next burst</span></li>
+            </ul>
+            <p class="keymap-note">Shift-click a frame to range-star a run of keepers.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ───────────────────────── features ───────────────────────── -->
+      <section class="section features" id="features">
+        <div class="section-head reveal">
+          <span class="kicker">What's in the box</span>
+          <h2>A culling tool, <em>not</em> a viewer.</h2>
+        </div>
+        <div class="feat-grid">
+          <article class="feat reveal">
+            <span class="feat-i">◍</span>
+            <h3>By person</h3>
+            <p>
+              Paginated, infinite-scroll people sidebar that handles thousands of faces. Rename inline; tick faces to
+              merge or split — and the manual edits survive re-clustering.
+            </p>
+          </article>
+          <article class="feat reveal">
+            <span class="feat-i">∿</span>
+            <h3>Burst-aware</h3>
+            <p>
+              Collapsed series rows expand to a lazy-loaded frame strip. Per-criterion pick pills — <em>group</em>,
+              <em>candid</em>, <em>aesthetic</em> — each toggled independently.
+            </p>
+          </article>
+          <article class="feat reveal">
+            <span class="feat-i">★</span>
+            <h3>Print list</h3>
+            <p>
+              One keystroke adds the keeper. Range-star a run. Export copies the chosen originals into a fresh folder —
+              the source library is never touched.
+            </p>
+          </article>
+          <article class="feat reveal">
+            <span class="feat-i">▤</span>
+            <h3>Buckets</h3>
+            <p>
+              User-defined collections — "Socials", "Candids", "Private" — an image can live in many. Number-key tagging
+              right from the review desk.
+            </p>
+          </article>
+          <article class="feat reveal">
+            <span class="feat-i">↻</span>
+            <h3>Non-destructive re-runs</h3>
+            <p>
+              Re-index or re-cluster anytime. Renames, merges, splits and manual picks all carry over — anchored to
+              stable face / image ids, re-applied after the pipeline.
+            </p>
+          </article>
+          <article class="feat reveal">
+            <span class="feat-i">⚙</span>
+            <h3>Live run console</h3>
+            <p>
+              Per-phase progress, streaming logs, an error panel, and a grid of faces appearing as they're detected.
+              Durable per-run history survives a restart.
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <!-- ───────────────────────── people / faces ───────────────────────── -->
+      <section class="section people" id="people">
+        <div class="people-grid">
+          <div class="people-copy reveal">
+            <span class="kicker">Faces, sorted</span>
+            <h2>Everyone, on <em>one shelf.</em></h2>
+            <p>
+              insightface — SCRFD/RetinaFace detection with ArcFace embeddings — separates identities far better than
+              the old MTCNN+FaceNet stacks (same-person cosine ~0.98 vs different ~0.15). Fewer junk clusters, fewer
+              jewelry-and-hands false positives.
+            </p>
+            <p>
+              Tick a face, choose <em>Merge into…</em> or <em>Split out</em>. Your call outlives the algorithm: every
+              manual fix is re-applied after the next HDBSCAN run.
+            </p>
+            <a
+              class="btn btn-ghost"
+              href="https://github.com/bharathksunil/atelier#face-engine-detection--recognition"
+              target="_blank"
+              rel="noopener"
+              >On the face engine ↗</a
+            >
+          </div>
+          <div class="people-shelf reveal" id="peopleShelf" aria-hidden="true"></div>
+        </div>
+      </section>
+
+      <!-- ───────────────────────── privacy ───────────────────────── -->
+      <section class="section privacy" id="privacy">
+        <div class="privacy-inner reveal">
+          <span class="kicker centered">The promise</span>
+          <h2>Your shoot never leaves the room.</h2>
+          <div class="privacy-row">
+            <div class="pv">
+              <b>127.0.0.1</b
+              ><span>The server is loopback-only and unauthenticated by design — never exposed to a network.</span>
+            </div>
+            <div class="pv">
+              <b>SQLite</b
+              ><span
+                >One database per project under <code>~/.atelier/</code>. Your index, picks and people — all on disk,
+                all yours.</span
+              >
+            </div>
+            <div class="pv">
+              <b>0 uploads</b
+              ><span
+                >After a one-time model download (~350–600&nbsp;MB), everything runs offline. No telemetry, no
+                cloud.</span
+              >
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ───────────────────────── install ───────────────────────── -->
+      <section class="section install" id="install">
+        <div class="section-head reveal">
+          <span class="kicker">Quickstart</span>
+          <h2>Clone, <em>make start,</em> done.</h2>
+          <p class="section-sub">
+            The web UI is project-centric: create a project, choose a folder with the native picker, and it indexes
+            live.
+          </p>
+        </div>
+        <div class="terminal reveal">
+          <div class="terminal-bar"><span></span><span></span><span></span><em>atelier — zsh</em></div>
+          <pre
+            class="terminal-body"
+          ><code><span class="c">make install</span>     <span class="cm"># venv (mise) + full pipeline deps</span>
+<span class="c">make start</span>       <span class="cm"># web server → http://localhost:5050</span>
+<span class="c">make open</span>        <span class="cm"># open the dashboard</span>
+<span class="cm">#   + New Project → Choose Folder → it indexes live</span>
+<span class="c">make demo</span>        <span class="cm"># or seed a synthetic project to explore first</span></code></pre>
+          <button class="copy-btn" id="copyInstall" data-copy="make install&#10;make start&#10;make open">Copy</button>
+        </div>
+        <div class="platforms reveal">
+          <div class="plat ok">
+            <b>macOS · Apple Silicon</b
+            ><span>Primary. CoreML / MPS acceleration, native picker, Reveal in Finder.</span>
+          </div>
+          <div class="plat ok"><b>macOS · Intel</b><span>Supported. CPU / CoreML; slower without MPS.</span></div>
+          <div class="plat warn">
+            <b>Linux</b
+            ><span>Best-effort. Pipeline + UI on CPU/CUDA; paste a folder path instead of the native picker.</span>
+          </div>
+          <div class="plat off"><b>Windows</b><span>Untested — not currently supported.</span></div>
+        </div>
+        <p class="install-fine reveal">
+          Python 3.11 / 3.12 · prebuilt wheels for insightface, hdbscan, mediapipe · first index needs internet once for
+          model weights.
+        </p>
+      </section>
+    </main>
+
+    <!-- ───────────────────────── footer ───────────────────────── -->
+    <footer class="footer">
+      <div class="footer-top">
+        <div class="footer-brand">
+          <svg class="brand-mark" viewBox="0 0 64 64" width="32" height="32" aria-hidden="true" fill="none">
+            <g stroke="#cda35c" stroke-width="2.6" stroke-linecap="round">
+              <path d="M10 20 V10 H20" />
+              <path d="M44 10 H54 V20" />
+              <path d="M54 44 V54 H44" />
+              <path d="M20 54 H10 V44" />
+            </g>
+            <path
+              d="M24 44 L32 20 L40 44"
+              stroke="#efe7d6"
+              stroke-width="3"
+              stroke-linejoin="round"
+              stroke-linecap="round"
+            />
+            <path d="M27.5 36 H36.5" stroke="#efe7d6" stroke-width="3" stroke-linecap="round" />
+            <circle cx="32" cy="20" r="2.6" fill="#cda35c" />
+          </svg>
+          <p>Atelier — local-first photo culling for photographers and anyone with a giant photo library.</p>
+        </div>
+        <nav class="footer-links" aria-label="Footer">
+          <a href="https://github.com/bharathksunil/atelier" target="_blank" rel="noopener">GitHub</a>
+          <a href="https://github.com/bharathksunil/atelier#quickstart-make" target="_blank" rel="noopener">Docs</a>
+          <a href="https://github.com/bharathksunil/atelier/blob/main/LICENSE" target="_blank" rel="noopener"
+            >MIT License</a
+          >
+          <a href="#demo">Live demo</a>
+        </nav>
+      </div>
+      <div class="footer-bottom">
+        <span>Runs on your machine. Always has.</span>
+        <span>Demo imagery via Lorem&nbsp;Picsum &amp; Pravatar · not affiliated.</span>
+      </div>
+    </footer>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+    <script src="js/demo.js" defer></script>
+    <script src="js/site.js" defer></script>
+  </body>
+</html>

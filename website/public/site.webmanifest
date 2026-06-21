@@ -1,0 +1,13 @@
+{
+  "name": "Atelier",
+  "short_name": "Atelier",
+  "description": "Local-first photo culling — cull by person, keep the best frame of every burst.",
+  "icons": [
+    { "src": "favicon-192.png", "type": "image/png", "sizes": "192x192" },
+    { "src": "favicon-512.png", "type": "image/png", "sizes": "512x512" },
+    { "src": "apple-touch-icon.png", "type": "image/png", "sizes": "180x180" }
+  ],
+  "theme_color": "#14110d",
+  "background_color": "#14110d",
+  "display": "standalone"
+}
