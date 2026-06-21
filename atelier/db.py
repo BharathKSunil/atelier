@@ -4,6 +4,7 @@ Base schema = v0. Schema growth happens via MIGRATIONS (PRAGMA user_version),
 applied automatically on connect() so existing project DBs upgrade in place.
 """
 
+import re
 import sqlite3
 
 BASE_SCHEMA = """
@@ -207,6 +208,23 @@ MIGRATIONS = [
             "ALTER TABLE series ADD COLUMN reviewed_at REAL",
         ],
     ),
+    # v10 — richer per-image quality metrics ("all the tags"). Computed in the score
+    # phase from already-stored per-face signals (no re-index). Back context-aware
+    # picks (everyone/smile/moment) + the plain-language fraction tags shown in Review.
+    (
+        10,
+        [
+            "ALTER TABLE images ADD COLUMN moment_score REAL",  # decisive frame, soft eyes
+            "ALTER TABLE images ADD COLUMN cohesion REAL",  # 'everyone engaged'
+            "ALTER TABLE images ADD COLUMN joy REAL",  # biggest smile in the frame
+            "ALTER TABLE images ADD COLUMN comp_score REAL",  # crop-safety + thirds + headroom
+            "ALTER TABLE images ADD COLUMN eyes_open_frac REAL",  # fraction of faces eyes-open
+            "ALTER TABLE images ADD COLUMN smile_frac REAL",  # fraction smiling
+            "ALTER TABLE images ADD COLUMN front_frac REAL",  # fraction facing the camera
+            "ALTER TABLE images ADD COLUMN eyes_min REAL",  # worst eye (group-strict signal)
+            "ALTER TABLE images ADD COLUMN subject_size REAL",  # largest face area fraction
+        ],
+    ),
     # v11 — the print list IS a bucket. Buckets gain a role + a per-project default
     # (the spacebar target). The old print picks (pick_type='print') migrate into a
     # default "Print list" bucket so everything is one unified collection model.
@@ -225,26 +243,49 @@ MIGRATIONS = [
             "DELETE FROM picks WHERE pick_type='print'",
         ],
     ),
-    # v10 — richer per-image quality metrics ("all the tags"). Computed in the score
-    # phase from already-stored per-face signals (no re-index). Back context-aware
-    # picks (everyone/smile/moment) + the plain-language fraction tags shown in Review.
+    # v12 — P1 face signals from MediaPipe blendshapes + head-pose transform. Per-eye
+    # blink (independent L/R), head-pose Euler (yaw/pitch/roll), gaze-at-camera, and a
+    # Duchenne (genuine) smile signal. Populated in the score phase; null when the
+    # landmarker/blendshapes are unavailable (graceful fallback to EAR/geometry).
     (
-        10,
+        12,
         [
-            "ALTER TABLE images ADD COLUMN moment_score REAL",  # decisive frame, soft eyes
-            "ALTER TABLE images ADD COLUMN cohesion REAL",  # 'everyone engaged'
-            "ALTER TABLE images ADD COLUMN joy REAL",  # biggest smile in the frame
-            "ALTER TABLE images ADD COLUMN comp_score REAL",  # crop-safety + thirds + headroom
-            "ALTER TABLE images ADD COLUMN eyes_open_frac REAL",  # fraction of faces eyes-open
-            "ALTER TABLE images ADD COLUMN smile_frac REAL",  # fraction smiling
-            "ALTER TABLE images ADD COLUMN front_frac REAL",  # fraction facing the camera
-            "ALTER TABLE images ADD COLUMN eyes_min REAL",  # worst eye (group-strict signal)
-            "ALTER TABLE images ADD COLUMN subject_size REAL",  # largest face area fraction
+            "ALTER TABLE faces ADD COLUMN eye_left REAL",  # left-eye openness (1 - blink)
+            "ALTER TABLE faces ADD COLUMN eye_right REAL",  # right-eye openness
+            "ALTER TABLE faces ADD COLUMN yaw REAL",  # head turn L/R (deg)
+            "ALTER TABLE faces ADD COLUMN pitch REAL",  # head nod up/down (deg)
+            "ALTER TABLE faces ADD COLUMN roll REAL",  # head tilt (deg)
+            "ALTER TABLE faces ADD COLUMN gaze REAL",  # looking-at-camera [0,1]
+            "ALTER TABLE faces ADD COLUMN genuine_smile REAL",  # Duchenne smile [0,1]
+            "ALTER TABLE images ADD COLUMN gaze_frac REAL",  # fraction making eye contact
         ],
     ),
 ]
 
-SCHEMA_VERSION = MIGRATIONS[-1][0] if MIGRATIONS else 0
+SCHEMA_VERSION = max((v for v, _ in MIGRATIONS), default=0)
+
+_ADD_COL_RE = re.compile(r"ALTER TABLE (\w+) ADD COLUMN (\w+) (.+)", re.I)
+
+
+def _ensure_columns(conn):
+    """Self-heal: ensure every column declared by an ADD COLUMN migration exists,
+    independent of user_version. Repairs a DB left partial by the earlier
+    migration-ordering bug (a v9 DB that jumped to v11 and skipped v10's columns)."""
+    want = {}
+    for _, statements in MIGRATIONS:
+        for sql in statements:
+            m = _ADD_COL_RE.search(sql.strip())
+            if m:
+                want.setdefault(m.group(1), {})[m.group(2)] = m.group(3).strip()
+    changed = False
+    for table, cols in want.items():
+        have = {r[1] for r in conn.execute(f"PRAGMA table_info({table})")}
+        for col, coltype in cols.items():
+            if col not in have:
+                conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {coltype}")
+                changed = True
+    if changed:
+        conn.commit()
 
 
 def _apply_migrations(conn):
@@ -254,11 +295,17 @@ def _apply_migrations(conn):
     conn.execute("BEGIN IMMEDIATE")
     try:
         cur = conn.execute("PRAGMA user_version").fetchone()[0]  # re-read under lock
-        for version, statements in MIGRATIONS:
+        for version, statements in sorted(MIGRATIONS, key=lambda m: m[0]):
             if version <= cur:
                 continue
             for sql in statements:
-                conn.execute(sql)
+                try:
+                    conn.execute(sql)
+                except sqlite3.OperationalError as e:
+                    # idempotent ADD COLUMN: a column left by drift is already there
+                    if "duplicate column name" in str(e).lower() and "add column" in sql.lower():
+                        continue
+                    raise
             conn.execute(f"PRAGMA user_version={version}")
         conn.commit()
     except Exception:
@@ -280,6 +327,7 @@ def connect(path):
         conn.executescript(BASE_SCHEMA)  # self-heal: ensure base tables before ALTERs
         conn.commit()
     _apply_migrations(conn)
+    _ensure_columns(conn)  # repair any column drift left by past migration ordering
     return conn
 
 
