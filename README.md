@@ -10,7 +10,7 @@ Browse a large local photo library by **person** and pick the **best frame of ea
 
 Two use-cases:
 1. **Group by name** — detect + cluster faces, label people, browse their photos.
-2. **Best of a series, for print** — group near-identical shots (bursts), score whole-frame print quality (group-aware: one blink disqualifies a frame), pick the single best to print.
+2. **Best of a series, for print** — group near-identical shots (bursts), read every frame on dozens of signals, and pick the keeper **per intent** (a group photo stays eyes-strict; a candid lets a great moment beat a blink). Six pick types, each explainable.
 
 ## Platform support
 
@@ -157,7 +157,7 @@ ruff check . && pytest -q  # lint + tests (also run in CI: .github/workflows/ci.
 
 - 5-point face alignment before embedding (needs re-index + opencv; A/B since vggface2 trained on unaligned crops).
 - Externalizing thumbnails to disk (DB-size diet at 100k faces).
-- Per-project tunables surfaced in the UI; a learned aesthetic model (current `aesthetic` pick is a colorfulness+exposure+sharpness heuristic, not a trained model).
+- A standalone learned **aesthetic** model (the `aesthetic` pick is still a colorfulness+exposure+sharpness heuristic). A general learned pick head **has** shipped (`atelier/learning.py` — a RankNet over the signals + DINOv2 embedding, trained from your feedback/bucket keeps), but it's a scaffold until real labels accrue, and there's no per-pick model yet. Per-project tunables **are** surfaced in the UI (Settings panel with scoped re-runs).
 - DOM virtualization for very large grids. The People grid (~hundreds) and per-person face grid paginate and lazy-load but accumulate nodes on infinite scroll; a windowing/recycling pass is deferred. The print list paginates server-side, so the heaviest grid (thousands of starred keepers) no longer renders all at once.
 
 ## Architecture notes
@@ -165,7 +165,7 @@ ruff check . && pytest -q  # lint + tests (also run in CI: .github/workflows/ci.
 - `atelier/` holds all logic. Heavy imports (torch, insightface, mediapipe) are **lazy** — pure modules (`quality`, `series`, `db`, `imaging`) import with numpy/Pillow only, so the math is unit-testable without GBs of deps.
 - **I/O bound, not GPU bound:** reading ~400 GB once dominates. External drives are the real bottleneck.
 - **Sharpness measured on full-res** (Phase 1, while the file is open) — downscaled sharpness is unreliable for detecting motion blur.
-- **Print score is group-aware:** `min(eye_open)` over all faces, so one person blinking sinks a group shot. Formula + weights in `atelier/config.py` and `atelier/quality.py`.
+- **Scoring is context-aware, not brittle:** every frame is read on per-eye blink, head pose, gaze, a Duchenne smile (one MediaPipe pass) plus sharpness, exposure, colour and composition (numpy), all stored per image. Each pick weights them differently — the **group** pick stays eyes-strict (area-weighted mean blended with the worst eye, not a hard `min`), while **moment** keeps eyes soft so a great frame beats a blink. Plain-language tags + honest flags surface in Review. Formulae/weights in `atelier/config.py`, `atelier/quality.py`, `atelier/pipeline/score.py`.
 - File formats: **JPEG + PNG** (Pillow native). PNG has no EXIF time → falls back to file mtime and series-grouping relies on the scene embedding for those.
 
 ## Tests

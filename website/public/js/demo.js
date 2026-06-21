@@ -16,15 +16,30 @@
   ];
 
   const META = {
-    group: { label: "Everyone", desc: "Everyone looking good — eyes open, sharp." },
+    group: { label: "Group", desc: "Best group frame — eyes open, sharp (eyes strict)." },
+    everyone: { label: "All eyes", desc: "Most people eyes-open, smiling, facing." },
+    smile: { label: "Best smile", desc: "The biggest, most genuine smile." },
     candid: { label: "Candid", desc: "Natural, un-posed — a real moment." },
+    moment: { label: "Moment", desc: "A great frame beats a blink — eyes stay soft." },
     aesthetic: { label: "Striking", desc: "Most visually striking frame." },
   };
-  const ORDER = ["group", "candid", "aesthetic"];
+  const ORDER = ["group", "everyone", "smile", "candid", "moment", "aesthetic"];
 
-  // tone = a CSS filter so near-identical burst frames read as distinct takes
+  // tone = a CSS filter so near-identical burst frames read as distinct takes.
+  // everyone/moment are DERIVED from the same signals — group stays eyes-strict, while
+  // moment keeps eyes soft so a great expression can still beat a blink (context-aware).
   const f = (sharp, eyes, smile, front, print, candid, aes, tone, blink) => ({
-    sharp, eyes, smile, front, print, candid, aes, tone: tone || "", blink: !!blink,
+    sharp,
+    eyes,
+    smile,
+    front,
+    print,
+    candid,
+    aes,
+    everyone: (eyes + smile + front) / 3,
+    moment: 0.45 * smile + 0.22 * sharp + 0.18 * front + 0.15 * eyes,
+    tone: tone || "",
+    blink: !!blink,
   });
 
   const BURSTS = [
@@ -85,7 +100,14 @@
       fr.idx = i;
     });
     const top = (key) => b.frames.reduce((a, c) => (c[key] > a[key] ? c : a)).id;
-    b.autoPicks = { group: top("print"), candid: top("candid"), aesthetic: top("aes") };
+    b.autoPicks = {
+      group: top("print"),
+      everyone: top("everyone"),
+      smile: top("smile"),
+      candid: top("candid"),
+      moment: top("moment"),
+      aesthetic: top("aes"),
+    };
   });
 
   const PCT = (x) => `${Math.round(x * 100)}`;
@@ -157,7 +179,8 @@
     const h = hero();
     const byImg = byImgMap();
 
-    el("rvCount").textContent = `Burst ${pos + 1} of ${BURSTS.length} · ${frames().length} frames · ${b.caption.split("·")[0].trim()}`;
+    el("rvCount").textContent =
+      `Burst ${pos + 1} of ${BURSTS.length} · ${frames().length} frames · ${b.caption.split("·")[0].trim()}`;
     el("rvProgress").style.width = `${((pos + 1) / BURSTS.length) * 100}%`;
 
     // stage
@@ -222,12 +245,18 @@
 
   function renderInspector(h, byImg) {
     const tags = (byImg[h.id] || []).map((p) => META[p.t].label);
+    const ap = burst().autoPicks;
     let why;
-    if (h.blink) why = `<b>One subject blinked</b> — eyes ${PCT(h.eyes)}%. Auto-disqualified as the group keeper.`;
-    else if (h.id === burst().autoPicks.group) why = `<b>The keeper.</b> Everyone sharp, eyes open — the safe group pick.`;
-    else if (h.id === burst().autoPicks.candid) why = `<b>Most candid.</b> Natural expression, unposed — smile ${PCT(h.smile)}%.`;
-    else if (h.id === burst().autoPicks.aesthetic) why = `<b>Most striking.</b> Strongest overall composition of the burst.`;
-    else why = `A solid frame, just edged out on print score by the keeper.`;
+    if (h.id === ap.group) why = `<b>The keeper.</b> Everyone sharp, eyes open — the eyes-strict group pick.`;
+    else if (h.id === ap.moment)
+      why = `<b>The moment.</b> Expression carries it — eyes are scored softly here, so a blink doesn't kill it.`;
+    else if (h.id === ap.candid) why = `<b>Most candid.</b> Natural, unposed — smile ${PCT(h.smile)}%.`;
+    else if (h.id === ap.smile) why = `<b>Best smile.</b> The biggest grin of the burst — smile ${PCT(h.smile)}%.`;
+    else if (h.id === ap.everyone) why = `<b>All eyes.</b> The most people open-eyed, smiling and facing the lens.`;
+    else if (h.id === ap.aesthetic) why = `<b>Most striking.</b> Strongest overall composition of the burst.`;
+    else if (h.blink)
+      why = `<b>One subject blinked</b> — eyes ${PCT(h.eyes)}%. It loses the group pick; not every frame is a keeper.`;
+    else why = `A solid frame, just edged out by the keeper.`;
 
     el("rvInspector").innerHTML = `
       <div class="insp-head">Frame ${h.idx + 1} · scores</div>
@@ -254,7 +283,11 @@
     el("rvBuckets")
       .querySelectorAll(".bk-chip")
       .forEach((c) => {
-        c.onclick = () => toggleBucket(BUCKETS.find((x) => x.id === +c.dataset.id), hero().id);
+        c.onclick = () =>
+          toggleBucket(
+            BUCKETS.find((x) => x.id === +c.dataset.id),
+            hero().id,
+          );
       });
   }
 
