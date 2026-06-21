@@ -314,6 +314,14 @@ MIGRATIONS = [
                )""",
         ],
     ),
+    # v16 — record the source folder on each run, so the Run screen's "Source:" line
+    # survives a server restart (it was rebuilt from the runs row, which lacked it).
+    (
+        16,
+        [
+            "ALTER TABLE runs ADD COLUMN folder TEXT",
+        ],
+    ),
 ]
 
 SCHEMA_VERSION = max((v for v, _ in MIGRATIONS), default=0)

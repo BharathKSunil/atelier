@@ -158,7 +158,7 @@ class Runner:
         try:
             c = db.connect(self.db_path)
             r = c.execute(
-                """SELECT id, started_at, finished_at, status, phases, error, log_file
+                """SELECT id, started_at, finished_at, status, phases, error, log_file, folder
                    FROM runs ORDER BY id DESC LIMIT 1"""
             ).fetchone()
             c.close()
@@ -177,6 +177,7 @@ class Runner:
                 error=(r["error"] if status in ("error", "interrupted", "cancelled") else None),
                 started_at=r["started_at"],
                 finished_at=r["finished_at"],
+                folder=r["folder"] or None,
                 run_id=r["id"],
             )
         # replay the run's on-disk log into the in-memory buffer that /run/log serves
@@ -381,9 +382,9 @@ class Runner:
             # plain INSERT (not OR REPLACE): a clock step-back that collides with an
             # existing id raises IntegrityError (caught) rather than clobbering history.
             c.execute(
-                """INSERT INTO runs(id, started_at, finished_at, status, phases, error, log_file)
-                   VALUES(?,?,?,?,?,?,?)""",
-                (run_id, time.time(), None, "running", ",".join(phases), None, log_file or ""),
+                """INSERT INTO runs(id, started_at, finished_at, status, phases, error, log_file, folder)
+                   VALUES(?,?,?,?,?,?,?,?)""",
+                (run_id, time.time(), None, "running", ",".join(phases), None, log_file or "", folder or ""),
             )
             c.commit()
             c.close()

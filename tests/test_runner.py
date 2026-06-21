@@ -105,5 +105,6 @@ def test_hydrate_restores_state_and_log_after_restart(tmp_path, monkeypatch):
     assert not s["running"]
     assert set(s["phases_done"]) == set(runner.PHASE_NAMES)  # B2: shows Complete, not blank
     assert s["run_id"] == rid
+    assert s["folder"] == str(tmp_path)  # v16: Source line survives the restart
     lines = [t for _, t in r2.log_lines(since=0)]  # B1: log replayed from disk
     assert any("all phases complete" in t for t in lines)
