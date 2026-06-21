@@ -83,3 +83,27 @@ def test_reconcile_marks_running_as_interrupted(tmp_path):
     c = db.connect(db_path)
     assert c.execute("SELECT status FROM runs WHERE id=1").fetchone()[0] == "interrupted"
     c.close()
+
+
+def test_hydrate_restores_state_and_log_after_restart(tmp_path, monkeypatch):
+    """A run finishes, the process restarts (fresh Runner), and the Run screen must
+    still show 'Complete' with the prior log replayed — not a blank state with only
+    face counts."""
+    monkeypatch.setattr(runner.subprocess, "Popen", lambda *a, **k: FakeProc(["indexing", "all phases complete"], 0))
+    db_path = str(tmp_path / "db.sqlite")
+    db.init_db(db_path).close()
+    runs_dir = str(tmp_path / "runs")
+    r1 = runner.Runner(db_path, log_path=str(tmp_path / "run.log"), runs_dir=runs_dir)
+    r1.start(str(tmp_path))
+    _wait(r1)
+    rid = r1.state["run_id"]
+
+    # simulate a restart: a brand-new runner with an empty in-memory state + log
+    runner._runners.clear()
+    r2 = runner.get_runner("proj", db_path, log_path=str(tmp_path / "run.log"), runs_dir=runs_dir)
+    s = r2.status()
+    assert not s["running"]
+    assert set(s["phases_done"]) == set(runner.PHASE_NAMES)  # B2: shows Complete, not blank
+    assert s["run_id"] == rid
+    lines = [t for _, t in r2.log_lines(since=0)]  # B1: log replayed from disk
+    assert any("all phases complete" in t for t in lines)

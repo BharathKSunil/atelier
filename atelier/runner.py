@@ -148,6 +148,50 @@ class Runner:
         except Exception:
             pass
 
+    def hydrate_from_last_run(self):
+        """After a server restart the live state + log buffer are empty, so the Run
+        screen would show only DB-derived face counts. Rebuild both from the most
+        recent `runs` row + its on-disk log so a finished run still reads 'Complete'
+        and the console replays. Only runs at creation (never mid-run)."""
+        if self.state["running"]:
+            return
+        try:
+            c = db.connect(self.db_path)
+            r = c.execute(
+                """SELECT id, started_at, finished_at, status, phases, error, log_file
+                   FROM runs ORDER BY id DESC LIMIT 1"""
+            ).fetchone()
+            c.close()
+        except Exception:
+            return
+        if not r:
+            return
+        phases = [p for p in (r["phases"] or "").split(",") if p]
+        status = r["status"]
+        with self.lock:
+            self.run_id = r["id"]
+            self.state.update(
+                running=False,
+                phase=None,
+                phases_done=phases if status == "done" else [],
+                error=(r["error"] if status in ("error", "interrupted", "cancelled") else None),
+                started_at=r["started_at"],
+                finished_at=r["finished_at"],
+                run_id=r["id"],
+            )
+        # replay the run's on-disk log into the in-memory buffer that /run/log serves
+        log_file = r["log_file"] or self.log_path
+        if log_file and os.path.exists(log_file):
+            try:
+                with open(log_file, encoding="utf-8", errors="replace") as f:
+                    lines = f.read().splitlines()[-MAX_LOG_LINES:]
+            except OSError:
+                lines = []
+            with self.lock:
+                for ln in lines:
+                    self._seq += 1
+                    self.log.append({"n": self._seq, "ts": 0.0, "t": ln})
+
     def start(self, folder, phases=None, flags=None):
         folder = (folder or "").strip()
         with self.lock:
@@ -385,5 +429,6 @@ def get_runner(slug, db_path, log_path=None, runs_dir=None):
     if r is None:
         r = Runner(db_path, log_path, runs_dir)
         r.reconcile()
+        r.hydrate_from_last_run()  # survive a restart: rebuild state + log from disk
         _runners[slug] = r
     return r
