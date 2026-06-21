@@ -279,6 +279,22 @@ MIGRATIONS = [
             "ALTER TABLE images ADD COLUMN bokeh REAL",  # subject-vs-bg sharpness
         ],
     ),
+    # v14 — P2/P3 scene / focus / dup signals. Per-face awkward-expression flags from
+    # the already-extracted blendshapes; per-image scene signals over the thumbnail; a
+    # within-burst near-duplicate score from the stored DINOv2 embeddings.
+    (
+        14,
+        [
+            "ALTER TABLE faces ADD COLUMN grimace REAL",  # brow/sneer/frown transient
+            "ALTER TABLE faces ADD COLUMN mouth_open REAL",  # talking (jaw open, no smile)
+            "ALTER TABLE images ADD COLUMN warmth REAL",  # colour temperature (golden hour)
+            "ALTER TABLE images ADD COLUMN rim_light REAL",  # backlight / rim halo
+            "ALTER TABLE images ADD COLUMN clutter REAL",  # background busy-ness
+            "ALTER TABLE images ADD COLUMN symmetry REAL",  # left-right mirror similarity
+            "ALTER TABLE images ADD COLUMN motion_blur REAL",  # directional-smear anisotropy
+            "ALTER TABLE images ADD COLUMN redundancy REAL",  # within-burst near-dup cosine
+        ],
+    ),
 ]
 
 SCHEMA_VERSION = max((v for v, _ in MIGRATIONS), default=0)

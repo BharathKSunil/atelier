@@ -74,6 +74,13 @@ def test_score_stores_p1_signals(tmp_path, monkeypatch):
     assert im["contrast"] == 0.0 and im["color_cast"] == 0.0  # flat, neutral
     assert im["skin_exposure"] is not None
     assert abs(im["bokeh"] - 0.8) < 1e-3  # 480 / (480 + 120)
+    # v14 scene + blendshape signals
+    fb = conn.execute("SELECT grimace, mouth_open FROM faces WHERE id=1").fetchone()
+    assert fb["grimace"] == 0.0 and fb["mouth_open"] == 0.0  # no brow/jaw in the synthetic blend
+    sc = conn.execute("SELECT warmth, clutter, symmetry, motion_blur FROM images WHERE id=1").fetchone()
+    assert sc["warmth"] is not None
+    assert sc["clutter"] == 0.0 and sc["motion_blur"] == 0.0  # flat thumbnail
+    assert sc["symmetry"] > 0.95  # flat -> mirror-symmetric
     conn.close()
 
 

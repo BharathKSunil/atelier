@@ -258,3 +258,62 @@ def test_horizon_tilt_level_vs_tilted_and_gated():
     assert quality.horizon_tilt(_tilted_edge(8)) > quality.horizon_tilt(_tilted_edge(0))
     busy = np.random.default_rng(2).integers(0, 255, (64, 64), dtype=np.uint8)
     assert quality.horizon_tilt(busy) == 0.0  # no dominant axis -> gated to 0
+
+
+# ---------------------------------------------------------------- P2/P3 scene/focus/dup
+def test_warmth_warm_vs_cool():
+    warm = np.zeros((8, 8, 3), np.uint8)
+    warm[..., 0] = 220
+    warm[..., 2] = 40
+    cool = np.zeros((8, 8, 3), np.uint8)
+    cool[..., 0] = 40
+    cool[..., 2] = 220
+    neutral = np.full((8, 8, 3), 128, np.uint8)
+    assert quality.warmth(warm) > quality.warmth(neutral) > quality.warmth(cool)
+    assert abs(quality.warmth(neutral) - 0.5) < 0.05
+
+
+def test_clutter_excludes_faces():
+    flat = np.full((32, 32), 128, np.uint8)
+    busy = np.random.default_rng(5).integers(0, 255, (32, 32), dtype=np.uint8)  # high-freq texture
+    assert quality.clutter(flat, []) == 0.0
+    assert quality.clutter(busy, []) > 0.3
+    assert quality.clutter(busy, [(0, 0, 32, 32)]) == 0.0  # all bg masked out
+
+
+def test_symmetry_mirror_vs_ramp():
+    base = np.arange(8)
+    row = np.concatenate([base, base[::-1]]).astype(np.uint8)  # mirror-symmetric row
+    sym = np.tile(row, (16, 1))
+    ramp = np.tile(np.arange(16), (16, 1)).astype(np.uint8)
+    assert quality.symmetry(sym) > 0.95
+    assert quality.symmetry(ramp) < quality.symmetry(sym)
+
+
+def test_rim_light_backlit():
+    g = np.full((40, 40), 200, np.uint8)  # bright surround
+    g[10:30, 10:30] = 40  # dark subject
+    assert quality.rim_light(g, (10, 10, 30, 30)) > 0.2
+    assert quality.rim_light(np.full((40, 40), 128, np.uint8), (10, 10, 30, 30)) == 0.0
+    assert quality.rim_light(g, None) == 0.0
+
+
+def test_motion_blur_directional_vs_isotropic():
+    directional = np.tile(np.linspace(0, 255, 32).reshape(32, 1), (1, 32)).astype(np.uint8)
+    iso = np.random.default_rng(3).integers(0, 255, (32, 32), dtype=np.uint8)
+    assert quality.motion_blur(directional) > quality.motion_blur(iso)
+    assert quality.motion_blur(directional) > 0.5
+
+
+def test_grimace_and_talking():
+    assert quality.grimace(0.1, 0.7, 0.2) == 0.7  # strongest transient
+    assert quality.mouth_open_talking(0.8, 0.1) > quality.mouth_open_talking(0.8, 0.9)  # a smile suppresses talking
+    assert quality.mouth_open_talking(0.0, 0.0) == 0.0
+
+
+def test_cosine_and_redundancy():
+    a, b, c = np.array([1.0, 0, 0]), np.array([1.0, 0, 0]), np.array([0, 1.0, 0])
+    assert abs(quality.cosine_sim(a, b) - 1.0) < 1e-9
+    assert abs(quality.cosine_sim(a, c)) < 1e-9
+    assert quality.max_redundancy(a, [c, b]) > 0.99  # a near-dup is present
+    assert quality.max_redundancy(a, []) is None

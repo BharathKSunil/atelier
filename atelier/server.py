@@ -753,6 +753,9 @@ def create_app(projects_dir):
                  moment_score, cohesion, joy, comp_score,
                  eyes_open_frac, smile_frac, front_frac, gaze_frac, subject_size,
                  highlight_frac, shadow_frac, color_cast, horizon_tilt, skin_exposure, bokeh,
+                 warmth, clutter, motion_blur, redundancy,
+                 (SELECT MAX(grimace) FROM faces WHERE image_id=images.id) AS grimace_max,
+                 (SELECT MAX(mouth_open) FROM faces WHERE image_id=images.id) AS talking_max,
                  EXISTS(SELECT 1 FROM bucket_items WHERE image_id=images.id
                         AND bucket_id=(SELECT id FROM buckets WHERE is_default=1 ORDER BY id LIMIT 1)) AS is_print
                FROM images WHERE series_id=?
@@ -803,6 +806,9 @@ def create_app(projects_dir):
                  i.moment_score, i.cohesion, i.joy, i.comp_score, i.eyes_open_frac, i.smile_frac, i.front_frac,
                  i.gaze_frac, i.subject_size,
                  i.highlight_frac, i.shadow_frac, i.color_cast, i.horizon_tilt, i.skin_exposure, i.bokeh,
+                 i.warmth, i.clutter, i.motion_blur, i.redundancy,
+                 (SELECT MAX(grimace) FROM faces WHERE image_id=i.id) AS grimace_max,
+                 (SELECT MAX(mouth_open) FROM faces WHERE image_id=i.id) AS talking_max,
                  EXISTS(SELECT 1 FROM bucket_items WHERE image_id=i.id
                         AND bucket_id=(SELECT id FROM buckets WHERE is_default=1 ORDER BY id LIMIT 1)) AS is_print
                FROM images i

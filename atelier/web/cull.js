@@ -657,7 +657,15 @@ function lightFlags(h) {
   if (bad(h.color_cast, 0.5)) f.push(`<span class="flag warn">colour cast</span>`);
   if (bad(h.horizon_tilt, 0.5)) f.push(`<span class="flag warn">tilted</span>`);
   if (h.skin_exposure != null && h.skin_exposure < 0.4) f.push(`<span class="flag warn">dim subject</span>`);
+  // motion blur is only a call when the smear is strong AND the frame is soft overall
+  if (bad(h.motion_blur, 0.6) && h.global_sharpness != null && h.global_sharpness < 0.4)
+    f.push(`<span class="flag warn">motion blur</span>`);
+  if (bad(h.clutter, 0.6)) f.push(`<span class="flag warn">busy background</span>`);
+  if (bad(h.grimace_max, 0.5)) f.push(`<span class="flag warn">grimace</span>`);
+  if (bad(h.talking_max, 0.5)) f.push(`<span class="flag warn">talking</span>`);
+  if (bad(h.redundancy, 0.93)) f.push(`<span class="flag warn">near-duplicate</span>`);
   if (bad(h.bokeh, 0.65)) f.push(`<span class="flag good">bokeh</span>`);
+  if (bad(h.warmth, 0.62)) f.push(`<span class="flag good">golden hour</span>`);
   return f.length ? `<div class="insp-flags">${f.join("")}</div>` : "";
 }
 

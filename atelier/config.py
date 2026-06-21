@@ -95,6 +95,16 @@ SHADOW_WARN = 0.18  # crushed-shadow area fraction that raises a flag
 CAST_WARN = 0.5  # color-cast value that raises a flag
 TILT_WARN = 0.5  # horizon-tilt value that raises a flag
 
+# P2/P3 scene / focus / dup signals.
+CLUTTER_FALLOFF = 30.0  # mean background gradient that reads as a full clutter
+SYMMETRY_FALLOFF = 60.0  # mirror MAE that drives symmetry to 0
+WARMTH_WARN = 0.62  # warmth value that earns the "golden hour" tag
+CLUTTER_WARN = 0.6  # busy-background flag threshold
+MOTION_BLUR_WARN = 0.6  # anisotropy flag (only when sharpness is also low)
+GRIMACE_WARN = 0.5  # awkward-expression flag threshold
+TALKING_WARN = 0.5  # mid-speech flag threshold
+REDUNDANT_WARN = 0.93  # within-burst cosine that reads as a near-duplicate
+
 # Group pick: eyes stay important. eyes_term = a blend of the area-weighted mean
 # (a tiny background blink can't dominate) and the worst eye (a foreground blink hurts),
 # minus a per-straggler penalty. Continuous blur floor replaces the old ×0.25 step.

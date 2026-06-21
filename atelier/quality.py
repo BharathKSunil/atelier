@@ -263,6 +263,121 @@ def horizon_tilt(gray):
     return float(np.clip(dev / config.HORIZON_MAX_TILT_DEG, 0.0, 1.0))
 
 
+# --------------------------------------------------- P2/P3: scene / light / focus / dup
+# More signals over stored pixels + the already-extracted blendshapes & embeddings. Each
+# is gated to neutral when it can't be trusted (no dominant cue / no faces / busy scene)
+# so it never invents a verdict. Deliberately NOT included: lead-room and mutual-gaze —
+# both need a CALIBRATED yaw sign, which MediaPipe's transform doesn't give reliably.
+def warmth(rgb):
+    """Colour temperature [0,1] (0.5 = neutral, higher = warmer). Mean (R-B)/(R+B);
+    golden-hour light reads high. A positive signal, not a fault."""
+    a = np.asarray(rgb, dtype=np.float64)
+    if a.ndim != 3 or a.shape[2] < 3 or a.size == 0:
+        return 0.5
+    r, b = a[..., 0], a[..., 2]
+    w = float(((r - b) / (r + b + 1e-6)).mean())  # -1..1
+    return float(np.clip((w + 1.0) / 2.0, 0.0, 1.0))
+
+
+def clutter(gray, boxes):
+    """Background busy-ness [0,1]: mean gradient magnitude OUTSIDE the faces. A clean
+    backdrop reads low; a cluttered one reads high. `boxes` in gray (thumbnail) coords."""
+    g = np.asarray(gray, dtype=np.float64)
+    if g.ndim != 2 or min(g.shape) < 4:
+        return 0.0
+    gy = g[2:, 1:-1] - g[:-2, 1:-1]
+    gx = g[1:-1, 2:] - g[1:-1, :-2]
+    mag = np.hypot(gx, gy)
+    bg = np.ones(mag.shape, dtype=bool)
+    for x1, y1, x2, y2 in boxes:
+        ix1, iy1 = max(0, int(x1) - 1), max(0, int(y1) - 1)
+        ix2, iy2 = min(mag.shape[1], int(x2)), min(mag.shape[0], int(y2))
+        if ix2 > ix1 and iy2 > iy1:
+            bg[iy1:iy2, ix1:ix2] = False
+    if int(bg.sum()) < 16:
+        return 0.0
+    return float(np.clip(mag[bg].mean() / config.CLUTTER_FALLOFF, 0.0, 1.0))
+
+
+def symmetry(gray):
+    """Left-right mirror similarity [0,1] (1 = symmetric). 1 - normalized MAE between
+    the frame and its horizontal flip. Rescues centered, balanced compositions."""
+    g = np.asarray(gray, dtype=np.float64)
+    if g.ndim != 2 or g.shape[1] < 2:
+        return 0.0
+    mae = float(np.abs(g - g[:, ::-1]).mean())
+    return float(np.clip(1.0 - mae / config.SYMMETRY_FALLOFF, 0.0, 1.0))
+
+
+def rim_light(gray, box):
+    """Backlight / rim halo [0,1]: brightness in a ring just OUTSIDE the subject's head
+    minus the subject interior — positive when the subject is rimmed by light / backlit.
+    `box` in gray coords; None -> 0."""
+    g = np.asarray(gray, dtype=np.float64)
+    if g.ndim != 2 or box is None:
+        return 0.0
+    h, w = g.shape
+    x1, y1, x2, y2 = (int(v) for v in box)
+    x1, y1, x2, y2 = max(0, x1), max(0, y1), min(w, x2), min(h, y2)
+    if x2 - x1 < 4 or y2 - y1 < 4:
+        return 0.0
+    interior = float(g[y1:y2, x1:x2].mean())
+    inner_sum, inner_n = float(g[y1:y2, x1:x2].sum()), (y2 - y1) * (x2 - x1)
+    px, py = max(2, (x2 - x1) // 4), max(2, (y2 - y1) // 4)
+    ox1, oy1, ox2, oy2 = max(0, x1 - px), max(0, y1 - py), min(w, x2 + px), min(h, y2 + py)
+    outer = g[oy1:oy2, ox1:ox2]
+    ring_n = outer.size - inner_n
+    if ring_n <= 0:
+        return 0.0
+    ring = (float(outer.sum()) - inner_sum) / ring_n
+    return float(np.clip((ring - interior) / 128.0, 0.0, 1.0))
+
+
+def motion_blur(gray):
+    """Structure-tensor anisotropy [0,1]: a directional smear concentrates gradients on
+    one axis (high); uniform defocus/texture is isotropic (low). A WEAK typed signal —
+    only call camera-shake when this is high AND overall sharpness is low."""
+    g = np.asarray(gray, dtype=np.float64)
+    if g.ndim != 2 or min(g.shape) < 4:
+        return 0.0
+    gy = g[2:, 1:-1] - g[:-2, 1:-1]
+    gx = g[1:-1, 2:] - g[1:-1, :-2]
+    jxx, jyy, jxy = float((gx * gx).mean()), float((gy * gy).mean()), float((gx * gy).mean())
+    tr = jxx + jyy
+    if tr < 1e-6:
+        return 0.0
+    spread = float(np.sqrt(max(0.0, (jxx - jyy) ** 2 + 4.0 * jxy * jxy)))
+    return float(np.clip(spread / tr, 0.0, 1.0))  # (λ1-λ2)/(λ1+λ2)
+
+
+def grimace(brow_down, nose_sneer, mouth_frown):
+    """Awkward-transient [0,1]: the strongest of brow-furrow / nose-sneer / mouth-frown
+    blendshapes. A soft per-face dampener."""
+    return float(np.clip(max(float(brow_down), float(nose_sneer), float(mouth_frown)), 0.0, 1.0))
+
+
+def mouth_open_talking(jaw_open, mouth_smile):
+    """Mid-speech [0,1]: jaw open WITHOUT a smile (talking, not grinning). Lets a pick
+    correct a 'smile' that's really an open talking mouth."""
+    return float(np.clip(float(jaw_open) * (1.0 - float(np.clip(mouth_smile, 0.0, 1.0))), 0.0, 1.0))
+
+
+def cosine_sim(a, b):
+    a = np.asarray(a, dtype=np.float64)
+    b = np.asarray(b, dtype=np.float64)
+    na, nb = float(np.linalg.norm(a)), float(np.linalg.norm(b))
+    if na < 1e-9 or nb < 1e-9:
+        return 0.0
+    return float(np.dot(a, b) / (na * nb))
+
+
+def max_redundancy(target, others):
+    """Highest cosine of a frame's global embedding to its burst-mates [0,1]. High = a
+    near-duplicate (another frame already covers this moment). None when alone."""
+    sims = [cosine_sim(target, o) for o in others if o is not None]
+    return float(max(sims)) if sims else None
+
+
 def kps_plausible(kps, box):
     """Anatomical sanity on the detector's 5 keypoints [left_eye, right_eye, nose,
     mouth_left, mouth_right] (image coords). Rejects the collapsed/impossible

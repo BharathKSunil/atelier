@@ -12,7 +12,11 @@ and [`docs/design/scoring-taxonomy.md`](design/scoring-taxonomy.md) (quality met
 
 **Metrics taxonomy P1 (light / colour / focus) shipped** — db v13 + pure-numpy scorers over the stored thumbnails (no originals re-read, except background sharpness which is measured in the index pass): highlight/shadow clipping, global contrast, white-balance cast (measured only on low-sat mid-luma pixels so golden-hour warmth doesn't false-flag), hue scatter, skin-tone/subject exposure, Dutch-tilt (hard-gated on a dominant edge axis), and subject-vs-background sharpness (`bokeh`) from a faces-masked background Laplacian. The inspector surfaces the bad ones as flags (blown / crushed / cast / tilted / dim subject) plus `bokeh` as a positive. Verified end-to-end (pure-fn unit tests + a monkeypatched score run + a real-image sanity pass).
 
-**Still open in §5:** golden-hour warmth, rim/back-light, motion-blur typing, leading lines, symmetry, mutual-gaze/connection (need new extracts), and the **learned heads** (NIMA aesthetic, RankNet pick regressor) — those need a labeled training run over `pick_feedback`/buckets, not just code. See [`design/scoring-taxonomy.md`](design/scoring-taxonomy.md) §5.
+**Metrics taxonomy P2/P3 (scene / focus / dup) shipped** — db v14: golden-hour warmth, rim/back-light, background clutter, mirror symmetry, structure-tensor motion-blur (anisotropy, only flagged when sharpness is also low), per-face grimace + talking from the already-extracted blendshapes, and within-burst near-duplicate (`redundancy`) from the stored DINOv2 embeddings. Inspector flags: motion blur / busy background / grimace / talking / near-duplicate (warn) + golden hour (good). Pure-fn unit tests + score wiring test + real-image sanity.
+
+**Deliberately NOT shipped** (would emit garbage without more): lead-room and mutual-gaze need a *calibrated* yaw sign (MediaPipe's transform doesn't give a reliable one); leading-lines (Hough) and subject-region motion-blur false-positive too often on real scenes to be worth it.
+
+**Still open in §5 — the learned heads** (NIMA aesthetic, RankNet pick regressor): need a labeled training run over `pick_feedback`/buckets, not just code. See [`design/scoring-taxonomy.md`](design/scoring-taxonomy.md) §5.
 
 ---
 

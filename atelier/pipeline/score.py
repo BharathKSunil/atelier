@@ -32,11 +32,19 @@ LOOK_KEYS = [
     "eyeLookInLeft", "eyeLookOutLeft", "eyeLookUpLeft", "eyeLookDownLeft",
     "eyeLookInRight", "eyeLookOutRight", "eyeLookUpRight", "eyeLookDownRight",
 ]  # fmt: skip
+JAW = "jawOpen"  # P2 grimace / talking blendshapes (max of left/right)
+BROW = ("browDownLeft", "browDownRight")
+SNEER = ("noseSneerLeft", "noseSneerRight")
+FROWN = ("mouthFrownLeft", "mouthFrownRight")
 
 
 def _signals(thumb_bytes):
     arr = np.asarray(Image.open(io.BytesIO(thumb_bytes)).convert("RGB"))
     return landmarks.face_signals(arr)
+
+
+def _emb(buf):
+    return np.frombuffer(buf, dtype=np.float32) if buf else None
 
 
 def main():
@@ -64,7 +72,7 @@ def main():
     faces = list(conn.execute(f"SELECT id, thumbnail, face_sharpness FROM faces {where}"))
     for f in tqdm(faces, desc="faces"):
         eye = sm = frontal = bright = 0.5
-        eye_l = eye_r = yaw = pitch = roll = gaze = genuine = None
+        eye_l = eye_r = yaw = pitch = roll = gaze = genuine = grim = mouth = None
         thumb = f["thumbnail"]
         if thumb:
             bright = quality.exposure_score(np.asarray(Image.open(io.BytesIO(thumb)).convert("L")))
@@ -94,13 +102,23 @@ def main():
                         )
                     # keep the lip-ratio `smile` for display continuity
                     sm = quality.smile(pts[MOUTH_L], pts[MOUTH_R], pts[LIP_TOP], pts[LIP_BOT])
+                    # P2 awkward-transient + talking (blendshape-only)
+                    if blend:
+                        grim = quality.grimace(
+                            max(blend.get(BROW[0], 0.0), blend.get(BROW[1], 0.0)),
+                            max(blend.get(SNEER[0], 0.0), blend.get(SNEER[1], 0.0)),
+                            max(blend.get(FROWN[0], 0.0), blend.get(FROWN[1], 0.0)),
+                        )
+                        mouth = quality.mouth_open_talking(
+                            blend.get(JAW, 0.0), max(blend.get(SMILE_L, 0.0), blend.get(SMILE_R, 0.0))
+                        )
         sharp = f["face_sharpness"] or 0.0
         q = quality.face_quality(sharp, bright, eye, frontal, sm)
         conn.execute(
             """UPDATE faces SET eye_open=?, smile=?, frontality=?, quality_score=?,
                eye_left=?, eye_right=?, yaw=?, pitch=?, roll=?, gaze=?, genuine_smile=?,
-               face_exposure=? WHERE id=?""",
-            (eye, sm, frontal, q, eye_l, eye_r, yaw, pitch, roll, gaze, genuine, bright, f["id"]),
+               face_exposure=?, grimace=?, mouth_open=? WHERE id=?""",
+            (eye, sm, frontal, q, eye_l, eye_r, yaw, pitch, roll, gaze, genuine, bright, grim, mouth, f["id"]),
         )
     conn.commit()
 
@@ -178,12 +196,25 @@ def main():
                 (r["bbox_x1"] or 0, r["bbox_y1"] or 0, r["bbox_x2"] or 0, r["bbox_y2"] or 0)))
             subj_sharp = subj["face_sharpness_raw"]
         bokeh = quality.bokeh_ratio(subj_sharp, im["bg_sharpness_raw"])
+        # P2/P3 scene signals over the thumbnail (face boxes mapped to thumbnail coords)
+        warm = rim = clut = sym = mot = None
+        if gray is not None and rgb is not None:
+            th, tw = gray.shape
+            sx, sy = tw / float(im["width"] or tw), th / float(im["height"] or th)
+            tboxes = [(b[0] * sx, b[1] * sy, b[2] * sx, b[3] * sy) for b in bboxes]
+            warm = quality.warmth(rgb)
+            clut = quality.clutter(gray, tboxes)
+            sym = quality.symmetry(gray)
+            mot = quality.motion_blur(gray)
+            subj_box = max(tboxes, key=lambda b: (b[2] - b[0]) * (b[3] - b[1]), default=None)
+            rim = quality.rim_light(gray, subj_box)
         conn.execute(
             """UPDATE images SET global_sharpness=?, aesthetic_score=?, candid_score=?, print_score=?,
                moment_score=?, cohesion=?, joy=?, comp_score=?,
                eyes_open_frac=?, smile_frac=?, front_frac=?, gaze_frac=?, eyes_min=?, subject_size=?,
                highlight_frac=?, shadow_frac=?, contrast=?, color_cast=?, hue_var=?, horizon_tilt=?,
-               skin_exposure=?, bokeh=? WHERE id=?""",
+               skin_exposure=?, bokeh=?,
+               warmth=?, rim_light=?, clutter=?, symmetry=?, motion_blur=? WHERE id=?""",
             (
                 gs,
                 quality.aesthetic_proxy(rgb, gs, ex),
@@ -207,9 +238,24 @@ def main():
                 tilt,
                 skin_exp,
                 bokeh,
+                warm,
+                rim,
+                clut,
+                sym,
+                mot,
                 im["id"],
             ),
         )
+    conn.commit()
+
+    # ---- within-burst near-duplicate (redundancy) from the stored DINOv2 embeddings ----
+    for s in conn.execute("SELECT id FROM series WHERE frame_count>1").fetchall():
+        rows = list(conn.execute("SELECT id, global_embedding FROM images WHERE series_id=?", (s["id"],)))
+        embs = [_emb(r["global_embedding"]) for r in rows]
+        for i, r in enumerate(rows):
+            others = [embs[j] for j in range(len(rows)) if j != i]
+            red = quality.max_redundancy(embs[i], others) if embs[i] is not None else None
+            conn.execute("UPDATE images SET redundancy=? WHERE id=?", (red, r["id"]))
     conn.commit()
 
     # ---- 'group' best mirror per series (is_best_in_series; auto picks for all
