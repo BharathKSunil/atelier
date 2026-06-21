@@ -1,6 +1,7 @@
 // Live run console: per-stage cards (the primary realtime view), live face grid,
 // stop/re-run, and collapsible logs (SSE stream, persisted across reloads).
 import { api, post, toast } from "./api.js";
+import { confirmDialog } from "./dialog.js";
 
 let timer = null; // status poll
 let slug = null;
@@ -27,6 +28,32 @@ export function mountRun(s) {
     lastSeq = 0;
     start();
   };
+
+  const freshBtn = document.getElementById("run-fresh");
+  if (freshBtn)
+    freshBtn.onclick = async () => {
+      const ok = await confirmDialog({
+        title: "Start over — destroy everything?",
+        message:
+          "This wipes <b>everything</b> for this project — every detected face, person, name, bucket, " +
+          "pick and all feedback — and re-runs the whole pipeline from scratch.<br>" +
+          "<span class='muted'>Your original photos are never touched. This can’t be undone.</span>",
+        okLabel: "Destroy & re-run",
+        danger: true,
+      });
+      if (!ok) return;
+      try {
+        await post(`/api/p/${slug}/rerun-fresh`, {});
+      } catch (e) {
+        toast(e && e.status === 409 ? "Stop the current run first" : "Could not start over", true);
+        return;
+      }
+      lastSeq = 0;
+      const logEl = document.getElementById("run-log");
+      if (logEl) logEl.textContent = "";
+      toast("Starting over…");
+      start();
+    };
 
   const stopBtn = document.getElementById("run-stop");
   if (stopBtn)
@@ -263,6 +290,8 @@ function render(s) {
 
   document.getElementById("run-stop").classList.toggle("hidden", !s.running);
   document.getElementById("run-again").classList.toggle("hidden", s.running);
+  const fresh = document.getElementById("run-fresh");
+  if (fresh) fresh.classList.toggle("hidden", s.running);
 
   document.getElementById("live-face-count").textContent = s.faces_found || 0;
   const faceKey = (s.recent_face_ids || []).join(",");

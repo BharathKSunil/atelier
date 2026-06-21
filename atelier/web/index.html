@@ -3,12 +3,36 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#14110d" />
     <title>Atelier — photo culling</title>
+    <link rel="icon" type="image/svg+xml" href="/static/favicon.svg" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/static/favicon-16.png" />
+    <link rel="apple-touch-icon" href="/static/apple-touch-icon.png" />
     <link rel="stylesheet" href="/static/style.css" />
   </head>
   <body>
     <div class="topbar">
-      <span class="brand" id="brand">Atelier<span class="dot">.</span></span>
+      <span class="brand" id="brand">
+        <svg class="brand-mark" viewBox="0 0 64 64" width="22" height="22" aria-hidden="true" fill="none">
+          <g stroke="#cda35c" stroke-width="2.6" stroke-linecap="round">
+            <path d="M10 20 V10 H20" />
+            <path d="M44 10 H54 V20" />
+            <path d="M54 44 V54 H44" />
+            <path d="M20 54 H10 V44" />
+          </g>
+          <path
+            d="M24 44 L32 20 L40 44"
+            stroke="#efe7d6"
+            stroke-width="3"
+            stroke-linejoin="round"
+            stroke-linecap="round"
+          />
+          <path d="M27.5 36 H36.5" stroke="#efe7d6" stroke-width="3" stroke-linecap="round" />
+          <circle cx="32" cy="20" r="2.6" fill="#cda35c" />
+        </svg>
+        <span>Atelier<span class="dot">.</span></span>
+      </span>
       <span id="crumb" class="crumb hidden"></span>
       <div class="spacer"></div>
       <div id="modes" class="modes hidden"></div>
@@ -36,20 +60,49 @@
         <div class="rev-bar">
           <button class="icon-btn" id="rv-prev" title="Previous burst (←)">‹</button>
           <span class="count" id="rv-count">—</span>
-          <div class="progress"><i id="rv-progress"></i></div>
-          <button class="btn ghost" id="rv-star" title="Star for printing (S)">☆ Add to print list</button>
+          <div class="progress" title="Reviewed bursts"><i id="rv-progress"></i></div>
+          <label class="rv-sort">
+            sort
+            <select id="rv-sort" title="Order of the bursts">
+              <option value="time">By time</option>
+              <option value="count">Biggest first</option>
+              <option value="score">Best first</option>
+            </select>
+          </label>
+          <button class="btn ghost" id="rv-star" title="Star for printing (Space)">☆ Add to print list</button>
           <button class="btn ghost" id="rv-star-rec" title="Star the recommended group frame">
             ★ Star recommended
           </button>
+          <button class="icon-btn" id="rv-insp-toggle" title="Toggle the stats panel (I)">▦</button>
           <button class="icon-btn" id="rv-fs" title="Fullscreen (F)">⛶</button>
           <button class="icon-btn" id="rv-next" title="Next burst (→)">›</button>
         </div>
-        <div class="stage" id="rv-stage"></div>
+
+        <div class="rev-main" id="rv-main">
+          <div class="stage" id="rv-stage" title="Scroll to zoom · drag to pan · double-click to reset"></div>
+          <div
+            class="rev-split rev-split-x"
+            id="rv-split-x"
+            role="separator"
+            aria-orientation="vertical"
+            title="Drag to resize"
+          ></div>
+          <aside class="rev-inspector" id="rv-inspector"></aside>
+        </div>
+
         <div class="bucket-strip" id="rv-buckets"></div>
+        <div
+          class="rev-split rev-split-y"
+          id="rv-split-y"
+          role="separator"
+          aria-orientation="horizontal"
+          title="Drag to resize the filmstrip"
+        ></div>
         <div class="strip" id="rv-strip"></div>
         <div class="help-fab" id="rv-help">
-          <span>←→</span> bursts <span>X</span> skip <span>↑↓</span> frames <span>Space</span> print
-          <span>1–9</span> buckets <span>G/C/A</span> tag <span>F</span> full <span>↵</span> zoom
+          <span>←→</span> bursts <span>↑↓</span> frames <span>Space</span> print <span>1–9</span> buckets
+          <span>G/C/A</span> tag <span>Tab</span> people <span>R</span> rename <span>Z</span> zoom <span>I</span> panel
+          <span>F</span> full
         </div>
       </section>
 
@@ -82,6 +135,9 @@
           </div>
           <div class="spacer"></div>
           <button id="run-stop" class="btn danger hidden">Stop run</button>
+          <button id="run-fresh" class="btn danger hidden" title="Wipe everything and re-run from scratch">
+            Start over…
+          </button>
           <button id="run-again" class="btn hidden">Re-run pipeline</button>
         </div>
         <div class="run-source" id="run-source"></div>
@@ -116,6 +172,13 @@
           <input id="np-folder" type="text" placeholder="Choose… or paste a folder path" spellcheck="false" />
           <button id="np-choose" class="btn ghost">Choose…</button>
         </div>
+        <label style="margin-top: 14px"
+          >Buckets
+          <span class="muted" style="font-weight: 400; font-size: 12px">
+            — collections to sort into. Spacebar in Review adds to the default ★.</span
+          ></label
+        >
+        <div class="np-buckets" id="np-buckets"></div>
         <p class="muted" style="font-size: 12px; margin-top: 12px">
           Originals are never modified. A fresh database is created for this project.
         </p>

@@ -39,7 +39,7 @@ WEB_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web")
 # Loopback hostnames the server will answer to. The app is unauthenticated by
 # design (single local user); these checks keep a stray LAN bind or a drive-by
 # cross-origin page from reaching the API.
-LOCAL_HOSTS = {"127.0.0.1", "localhost", "::1"}
+LOCAL_HOSTS = {"127.0.0.1", "localhost", "::1", "atelier.localhost"}
 
 
 def _copy_unique(paths, dest):
@@ -173,7 +173,9 @@ def create_app(projects_dir):
 
     @app.get("/favicon.ico")
     def favicon():
-        return ("", 204)
+        # serve the real mark for the bare /favicon.ico request (the HTML <link>s point
+        # at the svg/png set under /static, but some surfaces ask for /favicon.ico).
+        return send_from_directory(WEB_DIR, "favicon-32.png", mimetype="image/png")
 
     # ----- filesystem (native dialog) -----
     @app.post("/api/fs/choose")
@@ -223,9 +225,38 @@ def create_app(projects_dir):
             proj = projects.create_project(projects_dir, body.get("name"), body.get("folder"))
         except ValueError as e:
             return jsonify(ok=False, msg=str(e)), 400
+        _seed_buckets(proj["slug"], body.get("buckets"))  # per-project bucket setup from the new-project dialog
         flags = settings.phase_flags(settings.load(projects_dir, proj["slug"]))
         ok, msg = _runner(proj["slug"]).start(proj["source_folder"], flags=flags)
         return jsonify(ok=True, project=proj, run_started=ok, run_msg=msg)
+
+    def _seed_buckets(slug, cfg):
+        """Create the starter buckets chosen at project creation. The migrated 'Print
+        list' default already exists; this adds extras and (optionally) re-points the
+        default. cfg = [{name, default?}, ...]."""
+        if not cfg:
+            return
+        c = _conn(slug)
+        chosen_default = None
+        for b in cfg:
+            name = (b.get("name") or "").strip()
+            if not name:
+                continue
+            row = c.execute("SELECT id FROM buckets WHERE name=? COLLATE NOCASE", (name,)).fetchone()
+            if row:
+                bid = row[0]
+            else:
+                n = c.execute("SELECT COUNT(*) FROM buckets").fetchone()[0]
+                bid = c.execute(
+                    "INSERT INTO buckets(name, color, sort_order, created_at) VALUES(?,?,?,?)",
+                    (name, _BUCKET_COLORS[n % len(_BUCKET_COLORS)], n, time.time()),
+                ).lastrowid
+            if b.get("default"):
+                chosen_default = bid
+        if chosen_default is not None:
+            c.execute("UPDATE buckets SET is_default=0")
+            c.execute("UPDATE buckets SET is_default=1 WHERE id=?", (chosen_default,))
+        c.commit()
 
     @app.delete("/api/projects/<slug>")
     def delete_project(slug):
@@ -245,6 +276,33 @@ def create_app(projects_dir):
         phases = settings.PHASES_FOR.get(body.get("affects"))  # None -> full pipeline
         ok, msg = _runner(slug).start(folder, phases=phases, flags=flags)
         return jsonify(ok=ok, msg=msg), (200 if ok else 409)
+
+    @app.post("/api/p/<slug>/rerun-fresh")
+    def rerun_fresh(slug):
+        """DESTROY everything for this project — wipe the database completely — and
+        re-run the full pipeline from scratch on the same folder, as if it were a brand
+        new project. Buckets, names, manual merges/splits, picks and feedback are all
+        gone. Originals on disk are never touched."""
+        proj = _require(slug)
+        runner = _runner(slug)
+        if runner.state["running"]:
+            return jsonify(ok=False, msg="stop the current run before starting over"), 409
+        folder = proj["source_folder"]
+        if not folder or not os.path.isdir(folder):
+            return jsonify(ok=False, msg=f"source folder not found: {folder}"), 400
+        # release this request's cached handle, then delete the DB (+ WAL/SHM) and recreate it empty
+        dbp = projects.db_path(projects_dir, slug)
+        c = getattr(g, "_conns", {}).pop(slug, None)
+        if c is not None:
+            with contextlib.suppress(Exception):
+                c.close()
+        for suffix in ("", "-wal", "-shm"):
+            with contextlib.suppress(OSError):
+                os.remove(dbp + suffix)
+        db.init_db(dbp).close()
+        flags = settings.phase_flags(settings.load(projects_dir, slug))
+        ok, msg = runner.start(folder, flags=flags)  # empty DB -> index reprocesses everything
+        return jsonify(ok=ok, msg=msg, fresh=True), (200 if ok else 409)
 
     @app.get("/api/p/<slug>/settings")
     def get_settings(slug):
@@ -454,22 +512,52 @@ def create_app(projects_dir):
         n = _copy_unique(paths, dest)
         return jsonify(ok=True, count=n, total=len(paths), dest=dest)
 
-    # ----- buckets (user-defined collections; an image can be in many) -----
+    # ----- buckets (user-defined collections; an image can be in many; the print
+    #       list is just the project's default bucket) -----
     _BUCKET_COLORS = ["#c64a5b", "#cda35c", "#5c9ec6", "#6cae72", "#a76cc6", "#c68a5c"]
+
+    def _default_bucket_id(c):
+        """The spacebar / 'print list' target. Migration v11 guarantees one exists;
+        self-heal if a pre-v11 project somehow has none."""
+        r = c.execute("SELECT id FROM buckets WHERE is_default=1 ORDER BY id LIMIT 1").fetchone()
+        if r:
+            return r[0]
+        r = c.execute("SELECT id FROM buckets ORDER BY (role='print') DESC, id LIMIT 1").fetchone()
+        if r:
+            c.execute("UPDATE buckets SET is_default=1 WHERE id=?", (r[0],))
+            c.commit()
+            return r[0]
+        cur = c.execute(
+            "INSERT INTO buckets(name, color, role, is_default, sort_order, created_at) "
+            "VALUES('Print list', ?, 'print', 1, -1, ?)",
+            (_BUCKET_COLORS[0], time.time()),
+        )
+        c.commit()
+        return cur.lastrowid
 
     @app.get("/api/p/<slug>/buckets")
     def buckets_list(slug):
         _require(slug)
-        rows = (
-            _conn(slug)
-            .execute(
-                """SELECT b.id, b.name, b.color, b.sort_order,
+        c = _conn(slug)
+        _default_bucket_id(c)  # ensure one exists
+        rows = c.execute(
+            """SELECT b.id, b.name, b.color, b.sort_order, b.role, b.is_default,
                       (SELECT COUNT(*) FROM bucket_items WHERE bucket_id=b.id) AS count
                FROM buckets b ORDER BY b.sort_order, b.id"""
-            )
-            .fetchall()
-        )
+        ).fetchall()
         return jsonify([dict(r) for r in rows])
+
+    @app.post("/api/p/<slug>/buckets/<int:bid>/set-default")
+    def bucket_set_default(slug, bid):
+        """Make this bucket the project's default (the spacebar target). Per project."""
+        _require(slug)
+        c = _conn(slug)
+        if not _bucket_exists(c, bid):
+            return jsonify(ok=False, msg="no such bucket"), 404
+        c.execute("UPDATE buckets SET is_default=0")
+        c.execute("UPDATE buckets SET is_default=1 WHERE id=?", (bid,))
+        c.commit()
+        return jsonify(ok=True, default=bid)
 
     @app.post("/api/p/<slug>/buckets")
     def bucket_create(slug):
@@ -629,17 +717,26 @@ def create_app(projects_dir):
         return jsonify(ok=True, count=n, total=len(paths), dest=dest)
 
     # ----- series -----
+    # Burst ordering: chronological by capture time is the default a photographer
+    # culls in; 'count' (biggest bursts first) and 'score' are kept as options.
+    _SERIES_SORT = {
+        "time": "ORDER BY (s.time_start IS NULL), s.time_start, s.id",
+        "count": "ORDER BY s.frame_count DESC, s.id",
+        "score": "ORDER BY best_score DESC, s.id",
+    }
+
     @app.get("/api/p/<slug>/series")
     def series_list(slug):
         _require(slug)
         c = _conn(slug)
         offset, limit = _page()
+        order = _SERIES_SORT.get((request.args.get("sort") or "time").lower(), _SERIES_SORT["time"])
         total = c.execute("SELECT COUNT(*) FROM series WHERE frame_count>1").fetchone()[0]
         rows = c.execute(
-            """SELECT s.id, s.frame_count, s.best_image_id,
+            f"""SELECT s.id, s.frame_count, s.best_image_id, s.time_start, s.time_end, s.reviewed_at,
                  (SELECT print_score FROM images WHERE id=s.best_image_id) best_score
                FROM series s WHERE s.frame_count>1
-               ORDER BY s.frame_count DESC LIMIT ? OFFSET ?""",
+               {order} LIMIT ? OFFSET ?""",
             (limit, offset),
         ).fetchall()
         return _paged([dict(r) for r in rows], total, offset, limit)
@@ -648,16 +745,112 @@ def create_app(projects_dir):
     def series_images(slug, sid):
         _require(slug)
         c = _conn(slug)
+        # Capture sequence (taken_at, sub_sec, id) — so in-burst navigation steps in
+        # the order the frames were shot, not a print-score reshuffle that "jumps".
         rows = c.execute(
             """SELECT id, path, print_score, is_best_in_series, global_sharpness, exposure_score,
-                 EXISTS(SELECT 1 FROM picks WHERE image_id=images.id AND pick_type='print') AS is_print
-               FROM images WHERE series_id=? ORDER BY print_score DESC""",
+                 taken_at, sub_sec, face_count,
+                 moment_score, cohesion, joy, comp_score, eyes_open_frac, smile_frac, front_frac, subject_size,
+                 EXISTS(SELECT 1 FROM bucket_items WHERE image_id=images.id
+                        AND bucket_id=(SELECT id FROM buckets WHERE is_default=1 ORDER BY id LIMIT 1)) AS is_print
+               FROM images WHERE series_id=?
+               ORDER BY (taken_at IS NULL), taken_at, COALESCE(sub_sec,0), id""",
             (sid,),
         ).fetchall()
         return jsonify([dict(r) for r in rows])
 
+    @app.get("/api/p/<slug>/review-set")
+    def review_set(slug):
+        """A flat, chronological set of photos for the Review desk, filtered by who is
+        in frame. One person (?person=, modes solo|group) or several (?persons=1,2,
+        modes together|only):
+          solo     → the person is the ONLY detected face
+          group    → the person appears WITH others
+          together → every selected person is present (others allowed) — 'in a group'
+          only     → exactly the selected people, nobody else identified
+        Same row shape as series_images so the cull view renders it unchanged."""
+        _require(slug)
+        c = _conn(slug)
+        raw = request.args.get("persons") or request.args.get("person") or ""
+        persons = [int(x) for x in raw.split(",") if x.strip().lstrip("-").isdigit()]
+        if not persons:
+            return jsonify(ok=False, msg="need person(s)"), 400
+        mode = (request.args.get("mode") or "solo").lower()
+        if mode in ("solo", "group"):
+            having = "= 1" if mode == "solo" else "> 1"
+            where = (
+                "i.id IN (SELECT image_id FROM faces WHERE person_id=?) "
+                f"AND (SELECT COUNT(*) FROM faces WHERE image_id=i.id) {having}"
+            )
+            params = [persons[0]]
+        elif mode in ("together", "only"):
+            where = " AND ".join(["EXISTS(SELECT 1 FROM faces WHERE image_id=i.id AND person_id=?)"] * len(persons))
+            params = list(persons)
+            if mode == "only":  # nobody else IDENTIFIED in frame (unclustered -1 faces ignored)
+                ph = ",".join("?" * len(persons))
+                where += (
+                    " AND NOT EXISTS(SELECT 1 FROM faces WHERE image_id=i.id "
+                    f"AND person_id>=0 AND person_id NOT IN ({ph}))"
+                )
+                params += list(persons)
+        else:
+            return jsonify(ok=False, msg="bad mode"), 400
+        rows = c.execute(
+            f"""SELECT i.id, i.path, i.print_score, i.is_best_in_series, i.global_sharpness, i.exposure_score,
+                 i.taken_at, i.sub_sec, i.face_count,
+                 i.moment_score, i.cohesion, i.joy, i.comp_score, i.eyes_open_frac, i.smile_frac, i.front_frac,
+                 i.subject_size,
+                 EXISTS(SELECT 1 FROM bucket_items WHERE image_id=i.id
+                        AND bucket_id=(SELECT id FROM buckets WHERE is_default=1 ORDER BY id LIMIT 1)) AS is_print
+               FROM images i
+               WHERE {where}
+               ORDER BY (i.taken_at IS NULL), i.taken_at, COALESCE(i.sub_sec, 0), i.id""",
+            params,
+        ).fetchall()
+        return jsonify([dict(r) for r in rows])
+
+    @app.post("/api/p/<slug>/series/<int:sid>/reviewed")
+    def series_reviewed(slug, sid):
+        """Mark/unmark a burst reviewed so cull progress survives a reload."""
+        _require(slug)
+        c = _conn(slug)
+        reviewed = bool((request.json or {}).get("reviewed", True))
+        c.execute("UPDATE series SET reviewed_at=? WHERE id=?", (time.time() if reviewed else None, sid))
+        c.commit()
+        return jsonify(ok=True, reviewed=reviewed)
+
+    @app.get("/api/p/<slug>/image/<int:iid>/faces")
+    def image_faces(slug, iid):
+        """Per-face stats for everyone detected in a frame — drives the Review
+        inspector (smile/eyes/frontality per person, used to judge the keep)."""
+        _require(slug)
+        c = _conn(slug)
+        # bbox is in ORIGINAL image pixels (index.py maps it back via _crop_full);
+        # width/height are the matching upright dims, so the client can place a leader
+        # line by (bbox / dims) × the rendered image rect.
+        rows = c.execute(
+            """SELECT f.id, f.person_id, f.confidence, f.eye_open, f.smile, f.frontality,
+                 f.face_sharpness, f.quality_score, f.is_best,
+                 f.bbox_x1, f.bbox_y1, f.bbox_x2, f.bbox_y2, p.display_name,
+                 i.width AS img_w, i.height AS img_h
+               FROM faces f JOIN images i ON i.id=f.image_id
+               LEFT JOIN persons p ON p.id=f.person_id
+               WHERE f.image_id=?
+               ORDER BY (f.bbox_x2-f.bbox_x1)*(f.bbox_y2-f.bbox_y1) DESC""",
+            (iid,),
+        ).fetchall()
+        return jsonify([dict(r) for r in rows])
+
     # picks are image-anchored (survive series regroup); auto picks derived here.
-    _SCORE_COL = {"group": "print_score", "aesthetic": "aesthetic_score", "candid": "candid_score"}
+    # one stored column per criterion — adding a pick is one row here + one column in score.py.
+    _SCORE_COL = {
+        "group": "print_score",
+        "everyone": "cohesion",
+        "smile": "joy",
+        "candid": "candid_score",
+        "moment": "moment_score",
+        "aesthetic": "aesthetic_score",
+    }
 
     @app.get("/api/p/<slug>/series/<int:sid>/picks")
     def series_picks(slug, sid):
@@ -665,7 +858,7 @@ def create_app(projects_dir):
         c = _conn(slug)
         imgs = list(
             c.execute(
-                """SELECT id, print_score, aesthetic_score, candid_score
+                """SELECT id, print_score, aesthetic_score, candid_score, cohesion, joy, moment_score
                FROM images WHERE series_id=?""",
                 (sid,),
             )
@@ -716,51 +909,119 @@ def create_app(projects_dir):
         c.commit()
         return jsonify(ok=True)
 
-    # ----- print list (starred keepers; multiple per burst allowed) -----
+    # ----- pick feedback (dogfooding: rate the auto picks for retraining) -----
+    _VERDICTS = {"good", "bad"}
+
+    @app.post("/api/p/<slug>/feedback")
+    def set_feedback(slug):
+        """Record a verdict on an auto pick. Anchored on (pick_type, auto_image_id).
+        verdict='good'/'bad'; optional better_image_id (the frame that should've won)
+        and a free-text note. Posting verdict=null clears it."""
+        _require(slug)
+        body = request.json or {}
+        ptype = body.get("pick_type")
+        auto = body.get("auto_image_id")
+        verdict = body.get("verdict")
+        if ptype not in config.PICK_TYPES or auto is None:
+            return jsonify(ok=False, msg="bad pick_type / auto_image_id"), 400
+        c = _conn(slug)
+        if verdict is None:
+            c.execute("DELETE FROM pick_feedback WHERE pick_type=? AND auto_image_id=?", (ptype, int(auto)))
+            c.commit()
+            return jsonify(ok=True, cleared=True)
+        if verdict not in _VERDICTS:
+            return jsonify(ok=False, msg="verdict must be good/bad"), 400
+        better = body.get("better_image_id")
+        note = (body.get("note") or "").strip() or None
+        c.execute(
+            """INSERT INTO pick_feedback(pick_type, auto_image_id, verdict, better_image_id, note, created_at)
+               VALUES(?,?,?,?,?,?)
+               ON CONFLICT(pick_type, auto_image_id) DO UPDATE SET
+                 verdict=excluded.verdict, better_image_id=excluded.better_image_id,
+                 note=excluded.note, created_at=excluded.created_at""",
+            (ptype, int(auto), verdict, int(better) if better is not None else None, note, time.time()),
+        )
+        c.commit()
+        return jsonify(ok=True)
+
+    @app.get("/api/p/<slug>/series/<int:sid>/feedback")
+    def get_feedback(slug, sid):
+        """Existing feedback for the frames of a burst, keyed by pick_type."""
+        _require(slug)
+        c = _conn(slug)
+        rows = c.execute(
+            """SELECT fb.pick_type, fb.auto_image_id, fb.verdict, fb.better_image_id, fb.note
+               FROM pick_feedback fb JOIN images i ON i.id=fb.auto_image_id
+               WHERE i.series_id=?""",
+            (sid,),
+        ).fetchall()
+        return jsonify({r["pick_type"]: dict(r) for r in rows})
+
+    @app.get("/api/p/<slug>/feedback/export")
+    def export_feedback(slug):
+        """All feedback joined with paths + the scores the model used — a retraining set."""
+        _require(slug)
+        c = _conn(slug)
+        rows = c.execute(
+            """SELECT fb.pick_type, fb.verdict, fb.note, fb.created_at,
+                 ai.path auto_path, ai.id auto_image_id,
+                 ai.print_score auto_print, ai.aesthetic_score auto_aesthetic, ai.candid_score auto_candid,
+                 bi.path better_path, fb.better_image_id,
+                 bi.print_score better_print, bi.aesthetic_score better_aesthetic, bi.candid_score better_candid
+               FROM pick_feedback fb
+               JOIN images ai ON ai.id=fb.auto_image_id
+               LEFT JOIN images bi ON bi.id=fb.better_image_id
+               ORDER BY fb.created_at DESC""",
+        ).fetchall()
+        return jsonify(count=len(rows), feedback=[dict(r) for r in rows])
+
+    # ----- print list = the default bucket. 'star' toggles membership of the default
+    #       bucket (spacebar in Review); /prints lists it; export copies it. -----
     @app.post("/api/p/<slug>/star/<int:iid>")
     def star(slug, iid):
         _require(slug)
         c = _conn(slug)
-        existing = c.execute("SELECT 1 FROM picks WHERE image_id=? AND pick_type='print'", (iid,)).fetchone()
+        bid = _default_bucket_id(c)
+        existing = c.execute("SELECT 1 FROM bucket_items WHERE bucket_id=? AND image_id=?", (bid, iid)).fetchone()
         if existing:
-            c.execute("DELETE FROM picks WHERE image_id=? AND pick_type='print'", (iid,))
+            c.execute("DELETE FROM bucket_items WHERE bucket_id=? AND image_id=?", (bid, iid))
             starred = False
         else:
             c.execute(
-                "INSERT OR IGNORE INTO picks(image_id, pick_type, source, reason) "
-                "VALUES(?, 'print', 'manual', 'starred')",
-                (iid,),
+                "INSERT OR IGNORE INTO bucket_items(bucket_id, image_id, added_at) VALUES(?,?,?)",
+                (bid, iid, time.time()),
             )
             starred = True
         c.commit()
-        return jsonify(ok=True, starred=starred)
+        return jsonify(ok=True, starred=starred, bucket_id=bid)
 
     @app.post("/api/p/<slug>/star_many")
     def star_many(slug):
         _require(slug)
         ids = (request.json or {}).get("image_ids") or []
         c = _conn(slug)
-        for iid in ids:
-            c.execute(
-                "INSERT OR IGNORE INTO picks(image_id, pick_type, source, reason) "
-                "VALUES(?, 'print', 'manual', 'starred')",
-                (int(iid),),
-            )
+        bid = _default_bucket_id(c)
+        now = time.time()
+        c.executemany(
+            "INSERT OR IGNORE INTO bucket_items(bucket_id, image_id, added_at) VALUES(?,?,?)",
+            [(bid, int(i), now) for i in ids],
+        )
         c.commit()
-        starred = c.execute("SELECT COUNT(*) FROM picks WHERE pick_type='print'").fetchone()[0]
-        return jsonify(ok=True, starred=starred)
+        starred = c.execute("SELECT COUNT(*) FROM bucket_items WHERE bucket_id=?", (bid,)).fetchone()[0]
+        return jsonify(ok=True, starred=starred, bucket_id=bid)
 
     @app.get("/api/p/<slug>/prints")
     def prints(slug):
         _require(slug)
         c = _conn(slug)
+        bid = _default_bucket_id(c)
         offset, limit = _page()
-        total = c.execute("SELECT COUNT(*) FROM picks WHERE pick_type='print'").fetchone()[0]
+        total = c.execute("SELECT COUNT(*) FROM bucket_items WHERE bucket_id=?", (bid,)).fetchone()[0]
         rows = c.execute(
             """SELECT i.id, i.path, i.series_id, i.print_score
-               FROM picks p JOIN images i ON i.id=p.image_id
-               WHERE p.pick_type='print' ORDER BY i.series_id, i.id LIMIT ? OFFSET ?""",
-            (limit, offset),
+               FROM bucket_items bi JOIN images i ON i.id=bi.image_id
+               WHERE bi.bucket_id=? ORDER BY i.series_id, i.id LIMIT ? OFFSET ?""",
+            (bid, limit, offset),
         ).fetchall()
         return _paged([dict(r) for r in rows], total, offset, limit)
 
@@ -770,11 +1031,11 @@ def create_app(projects_dir):
         dest = _safe_dest((request.json or {}).get("dest") or f"./print_exports/{slug}")
         if not dest:
             return jsonify(ok=False, msg="choose a valid destination folder"), 400
-        rows = (
-            _conn(slug)
-            .execute("SELECT i.path FROM picks p JOIN images i ON i.id=p.image_id WHERE p.pick_type='print'")
-            .fetchall()
-        )
+        c = _conn(slug)
+        bid = _default_bucket_id(c)
+        rows = c.execute(
+            "SELECT i.path FROM bucket_items bi JOIN images i ON i.id=bi.image_id WHERE bi.bucket_id=?", (bid,)
+        ).fetchall()
         os.makedirs(dest, exist_ok=True)
         n = _copy_unique([r["path"] for r in rows], dest)
         return jsonify(ok=True, count=n, dest=dest)
@@ -841,6 +1102,28 @@ def create_app(projects_dir):
             abort(404)
         return send_file(r["path"])
 
+    @app.post("/api/p/<slug>/export-images")
+    def export_images(slug):
+        """Copy a chosen set of image originals into a folder (deduped) — backs the
+        person view's 'Export selected'."""
+        _require(slug)
+        body = request.json or {}
+        try:
+            ids = [int(x) for x in (body.get("image_ids") or [])]
+        except (TypeError, ValueError):
+            return jsonify(ok=False, msg="bad image_ids"), 400
+        if not ids:
+            return jsonify(ok=False, msg="no images selected"), 400
+        dest = _safe_dest(body.get("dest"))
+        if not dest:
+            return jsonify(ok=False, msg="choose a valid destination folder"), 400
+        c = _conn(slug)
+        ph = ",".join("?" * len(ids))
+        paths = [r["path"] for r in c.execute(f"SELECT path FROM images WHERE id IN ({ph})", ids)]
+        os.makedirs(dest, exist_ok=True)
+        n = _copy_unique(paths, dest)
+        return jsonify(ok=True, count=n, total=len(paths), dest=dest)
+
     @app.post("/api/p/<slug>/export/<int:iid>")
     def export(slug, iid):
         _require(slug)
@@ -872,7 +1155,7 @@ def create_app(projects_dir):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--projects-dir", default=None)
-    ap.add_argument("--port", type=int, default=5050)
+    ap.add_argument("--port", type=int, default=int(os.environ.get("PORT", 5050)))
     args = ap.parse_args()
     args.projects_dir = args.projects_dir or config.default_projects_dir()
     print(f"http://localhost:{args.port}  (projects: {os.path.abspath(args.projects_dir)})")

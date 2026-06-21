@@ -106,7 +106,7 @@ function render() {
       (b, i) =>
         `<button class="bucket-tab ${b.id === active ? "on" : ""}" data-id="${b.id}">
            <span class="dot" style="background:${escapeHtml(b.color || "#cda35c")}"></span>
-           <span class="k">${i < 9 ? i + 1 : "•"}</span>${escapeHtml(b.name)}<em>${b.count}</em></button>`,
+           <span class="k">${i < 9 ? i + 1 : "•"}</span>${escapeHtml(b.name)}${b.is_default ? " ★" : ""}<em>${b.count}</em></button>`,
     )
     .join("");
   root.innerHTML = `
@@ -159,15 +159,33 @@ function renderDetail() {
       <input type="color" id="bk-color" value="${escapeHtml(b.color || "#cda35c")}" aria-label="Bucket colour" title="Bucket colour">
       <button class="btn ghost" id="bk-save">Save</button>
       <div class="spacer"></div>
+      ${
+        b.is_default
+          ? `<span class="muted" title="Spacebar in Review adds here">★ Default</span>`
+          : `<button class="btn ghost" id="bk-default" title="Make this the spacebar target">Make default</button>`
+      }
       <span class="muted">${b.count} photo${b.count === 1 ? "" : "s"}</span>
       <button class="btn" id="bk-export"${b.count ? "" : " disabled"}>Export…</button>
-      <button class="btn danger" id="bk-del">Delete</button>
+      ${b.is_default ? "" : `<button class="btn danger" id="bk-del">Delete</button>`}
     </div>
     <div class="prints-grid" id="bk-grid"></div><div class="sentinel" id="bk-sentinel"></div>`;
   document.getElementById("bk-save").onclick = () => saveBucket(b.id);
-  document.getElementById("bk-del").onclick = () => deleteBucket(b);
+  const delBtn = document.getElementById("bk-del");
+  if (delBtn) delBtn.onclick = () => deleteBucket(b);
+  const defBtn = document.getElementById("bk-default");
+  if (defBtn) defBtn.onclick = () => makeDefault(b.id);
   document.getElementById("bk-export").onclick = () => exportBucket(b);
   loadImages(b.id);
+}
+
+async function makeDefault(id) {
+  try {
+    await post(`/api/p/${slug}/buckets/${id}/set-default`, {});
+    toast("Set as default — spacebar adds here");
+    await refresh();
+  } catch {
+    toast("Could not set the default bucket", true);
+  }
 }
 
 async function saveBucket(id) {

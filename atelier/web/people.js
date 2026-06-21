@@ -3,10 +3,12 @@ import { api, post, pct, escapeHtml, toast } from "./api.js";
 import { openFaceModal } from "./faces.js";
 import { confirmDialog, promptDialog } from "./dialog.js";
 import { chooseBucket } from "./buckets.js";
+import { setReviewFilter } from "./cull.js";
 
 let slug = null;
 let observers = [];
-let selected = new Set();
+let selected = new Set(); // face ids ticked in the person detail
+let faceImg = {}; // face_id -> image_id (so a selection can act on images)
 let gridSel = new Set(); // people ticked on the grid for combined export
 let currentPerson = null;
 let query = "";
@@ -70,6 +72,8 @@ function renderPeople() {
     <div class="select-bar hidden" id="ppl-bar">
       <span id="ppl-bar-n">0 selected</span>
       <button class="btn ghost" id="ppl-bar-clear">Clear</button>
+      <button class="btn ghost" id="ppl-bar-together" title="Review photos with all of these people (others allowed)">Review together</button>
+      <button class="btn ghost" id="ppl-bar-only" title="Review photos with only these people, nobody else">Review only these</button>
       <button class="btn ghost" id="ppl-bar-bucket">Add to bucket…</button>
       <button class="btn" id="ppl-bar-export">Export photos…</button>
     </div>`;
@@ -86,6 +90,8 @@ function renderPeople() {
   };
   document.getElementById("ppl-bar-export").onclick = exportSelectedPeople;
   document.getElementById("ppl-bar-bucket").onclick = addSelectedToBucket;
+  document.getElementById("ppl-bar-together").onclick = () => reviewSelectedPeople("together");
+  document.getElementById("ppl-bar-only").onclick = () => reviewSelectedPeople("only");
   document.getElementById("ppl-bar-clear").onclick = () => {
     gridSel.clear();
     loadGrid();
@@ -191,10 +197,99 @@ function loadGrid() {
   });
 }
 
+function selectedImageIds() {
+  return [...new Set([...selected].map((fid) => faceImg[fid]).filter((x) => x != null))];
+}
+
+// open the Review/cull desk scoped to this person's solo / with-others photos
+function reviewFiltered(p, mode) {
+  setReviewFilter({ person: p.id, mode, label: p.display_name || `Person ${p.id}` });
+  location.hash = `#/p/${slug}/review`;
+}
+
+// multi-person review from the grid selection (duet+): 'together' (all of them, others
+// allowed) or 'only' (exactly these people, nobody else identified).
+function reviewSelectedPeople(mode) {
+  if (!gridSel.size) return;
+  const ids = [...gridSel];
+  setReviewFilter({ persons: ids, mode, label: `${ids.length} ${ids.length === 1 ? "person" : "people"}` });
+  location.hash = `#/p/${slug}/review`;
+}
+
+// keep the action labels in sync with the current selection: with a selection the
+// bucket/export buttons act on the selected images, otherwise on the whole person.
+function updateSelUI() {
+  const n = selected.size;
+  const nImg = selectedImageIds().length;
+  const split = document.getElementById("split-btn");
+  if (split) {
+    split.textContent = `Split out (${n})`;
+    split.classList.toggle("hidden", n === 0);
+  }
+  const sa = document.getElementById("selall-btn");
+  if (sa) sa.textContent = n ? `Clear (${n})` : "Select all";
+  const bk = document.getElementById("bucket-btn");
+  if (bk) bk.textContent = n ? `Bucket ${nImg} selected…` : "Add to bucket…";
+  const ex = document.getElementById("export-btn");
+  if (ex) ex.textContent = n ? `Export ${nImg} selected…` : "Export photos…";
+}
+
+// Select all selects the LOADED faces (the grid is infinite-scrolled); the whole-person
+// Export/Bucket (with nothing selected) still covers every photo.
+function toggleSelectAll() {
+  const cells = [...document.querySelectorAll("#face-grid .cell")];
+  const allOn = cells.length > 0 && cells.every((c) => c.querySelector(".cell-check").checked);
+  cells.forEach((c) => {
+    const chk = c.querySelector(".cell-check");
+    const fid = +c.dataset.fid;
+    chk.checked = !allOn;
+    c.classList.toggle("sel", !allOn);
+    if (allOn) selected.delete(fid);
+    else selected.add(fid);
+  });
+  updateSelUI();
+}
+
+async function bucketSelectedFaces() {
+  const ids = selectedImageIds();
+  if (!ids.length) return;
+  const bid = await chooseBucket(slug);
+  if (bid == null) return;
+  try {
+    const r = await post(`/api/p/${slug}/buckets/${bid}/add`, { image_ids: ids });
+    toast(`Added ${r.added} photo${r.added === 1 ? "" : "s"} to the bucket`);
+  } catch {
+    toast("Could not add to bucket", true);
+  }
+}
+
+async function exportSelectedFaces() {
+  const ids = selectedImageIds();
+  if (!ids.length) return;
+  let r;
+  try {
+    r = await post("/api/fs/choose", {});
+  } catch {
+    return;
+  }
+  if (!r || !r.ok || !r.path) {
+    if (r && r.unavailable) toast(r.msg, true);
+    return;
+  }
+  toast("Copying originals…");
+  try {
+    const res = await post(`/api/p/${slug}/export-images`, { image_ids: ids, dest: r.path });
+    toast(res.ok ? `Copied ${res.count} photos → ${res.dest}` : res.msg || "export failed", !res.ok);
+  } catch {
+    toast("Export failed", true);
+  }
+}
+
 function openPerson(p) {
   killObs();
   currentPerson = p;
   selected = new Set();
+  faceImg = {};
   const name = p.display_name || `Person ${p.id}`;
   const root = document.getElementById("people-root");
   root.innerHTML = `
@@ -203,14 +298,20 @@ function openPerson(p) {
       <input class="name" id="rename-input" value="${escapeHtml(name)}">
       <button class="btn ghost" id="rename-btn">Save</button>
       <button class="btn ghost" id="merge-btn">Merge into…</button>
+      <button class="btn ghost" id="rev-solo-btn" title="Review photos where this person is alone">Review solo</button>
+      <button class="btn ghost" id="rev-group-btn" title="Review photos with this person and others">Review with others</button>
+      <button class="btn ghost" id="selall-btn">Select all</button>
       <button class="btn ghost" id="bucket-btn">Add to bucket…</button>
       <button class="btn ghost" id="export-btn">Export photos…</button>
       <button class="btn danger hidden" id="split-btn">Split out (0)</button>
-      <span class="muted" style="margin-left:auto"><span id="person-count">${p.cnt}</span> photos · tick to merge/split · click to inspect</span>
+      <span class="muted" style="margin-left:auto"><span id="person-count">${p.cnt}</span> photos · Select all, or tick faces · click to inspect</span>
     </div>
     <div class="grid" id="face-grid"></div><div class="sentinel" id="face-sentinel"></div>`;
-  document.getElementById("export-btn").onclick = () => exportPerson(p);
-  document.getElementById("bucket-btn").onclick = () => addPersonToBucket(p);
+  document.getElementById("rev-solo-btn").onclick = () => reviewFiltered(p, "solo");
+  document.getElementById("rev-group-btn").onclick = () => reviewFiltered(p, "group");
+  document.getElementById("selall-btn").onclick = toggleSelectAll;
+  document.getElementById("export-btn").onclick = () => (selected.size ? exportSelectedFaces() : exportPerson(p));
+  document.getElementById("bucket-btn").onclick = () => (selected.size ? bucketSelectedFaces() : addPersonToBucket(p));
   const back = document.getElementById("back-people");
   back.onclick = () => mountPeople(slug);
   back.onkeydown = (e) => {
@@ -242,22 +343,22 @@ function openPerson(p) {
       if (el && r.total != null) el.textContent = r.total;
     },
     renderItem: (f) => {
+      faceImg[f.id] = f.image_id;
       const qual = `quality ${pct(f.quality_score)}`;
       const alt = `Face, ${qual}${f.is_best ? ", best of person" : ""}`;
       const cell = document.createElement("div");
       cell.className = "cell" + (f.is_best ? " best" : "");
+      cell.dataset.fid = f.id;
       cell.setAttribute("role", "button");
       cell.setAttribute("tabindex", "0");
       cell.setAttribute("aria-label", alt);
-      cell.innerHTML = `<input type="checkbox" class="cell-check" aria-label="Select this face for merge or split">${f.is_best ? `<span class="tag">BEST</span>` : ""}
+      cell.innerHTML = `<input type="checkbox" class="cell-check" aria-label="Select this face">${f.is_best ? `<span class="tag">BEST</span>` : ""}
         <img loading="lazy" src="/api/p/${slug}/thumb/${f.id}" alt="${escapeHtml(alt)}"><div class="q">${qual}</div>`;
       const chk = cell.querySelector(".cell-check");
       const toggleSel = () => {
         chk.checked ? selected.add(f.id) : selected.delete(f.id);
         cell.classList.toggle("sel", chk.checked);
-        const b = document.getElementById("split-btn");
-        b.textContent = `Split out (${selected.size})`;
-        b.classList.toggle("hidden", selected.size === 0);
+        updateSelUI();
       };
       chk.onclick = (e) => {
         e.stopPropagation();

@@ -75,9 +75,46 @@ export async function renderDashboard() {
 
 // ---- new project modal ----
 const modal = () => document.getElementById("modal-new");
+
+// per-project bucket setup. "Print list" always exists (the default spacebar target);
+// the rest are optional starters the user can include + re-point the default.
+const NP_SUGGESTED = ["Socials", "Album", "Candids", "Reject"];
+let npDefault = "Print list";
+function renderNpBuckets() {
+  npDefault = "Print list";
+  const el = document.getElementById("np-buckets");
+  const row = (name, fixed, checked) =>
+    `<label class="np-bk">
+       <input type="checkbox" class="np-bk-on" data-name="${name}" ${checked ? "checked" : ""} ${fixed ? "checked disabled" : ""}>
+       <span class="np-bk-name">${name}</span>
+       <button type="button" class="np-bk-def" data-name="${name}" title="Make this the default (spacebar) bucket">★</button>
+     </label>`;
+  el.innerHTML = row("Print list", true, true) + NP_SUGGESTED.map((n) => row(n, false, n === "Socials")).join("");
+  syncNpDefault();
+  el.querySelectorAll(".np-bk-def").forEach((b) => {
+    b.onclick = () => {
+      npDefault = b.dataset.name;
+      const chk = el.querySelector(`.np-bk-on[data-name="${b.dataset.name}"]`);
+      if (chk) chk.checked = true;
+      syncNpDefault();
+    };
+  });
+}
+function syncNpDefault() {
+  document.querySelectorAll("#np-buckets .np-bk").forEach((l) => {
+    l.classList.toggle("is-default", l.querySelector(".np-bk-on").dataset.name === npDefault);
+  });
+}
+function npBucketConfig() {
+  return [...document.querySelectorAll("#np-buckets .np-bk-on")]
+    .filter((c) => c.checked || c.dataset.name === npDefault)
+    .map((c) => ({ name: c.dataset.name, default: c.dataset.name === npDefault }));
+}
+
 const openM = () => {
   document.getElementById("np-name").value = "";
   document.getElementById("np-folder").value = "";
+  renderNpBuckets();
   modal().classList.remove("hidden");
 };
 const closeM = () => modal().classList.add("hidden");
@@ -107,7 +144,7 @@ document.getElementById("np-create").addEventListener("click", async () => {
   btn.disabled = true;
   let r;
   try {
-    r = await post("/api/projects", { name, folder });
+    r = await post("/api/projects", { name, folder, buckets: npBucketConfig() });
   } catch {
     btn.disabled = false;
     return toast("Could not create project", true);
