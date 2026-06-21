@@ -867,7 +867,8 @@ def create_app(projects_dir):
         c = _conn(slug)
         imgs = list(
             c.execute(
-                """SELECT id, print_score, aesthetic_score, candid_score, cohesion, joy, moment_score
+                """SELECT id, print_score, aesthetic_score, candid_score, cohesion, joy, moment_score,
+                          learned_score
                FROM images WHERE series_id=?""",
                 (sid,),
             )
@@ -884,15 +885,21 @@ def create_app(projects_dir):
                 ids,
             )
         }
+        # a trained learned head supersedes the heuristic column for ITS pick only
+        # (server 'group' == learning 'print'); absent a model this is a no-op.
+        learned = {r["pick_type"] for r in c.execute("SELECT pick_type FROM learned_models")}
         out = []
         for ptype in config.PICK_TYPES:
             if ptype in manual:
                 out.append({"pick_type": ptype, "image_id": manual[ptype], "source": "manual"})
                 continue
-            col = _SCORE_COL[ptype]
+            learn_key = "print" if ptype == "group" else ptype
+            use_learned = learn_key in learned
+            col = "learned_score" if use_learned else _SCORE_COL[ptype]
             cand = [(r[col], r["id"]) for r in imgs if r[col] is not None]
             if cand:
-                out.append({"pick_type": ptype, "image_id": max(cand)[1], "source": "auto"})
+                src = "learned" if use_learned else "auto"
+                out.append({"pick_type": ptype, "image_id": max(cand)[1], "source": src})
         return jsonify(pick_types=config.PICK_TYPES, picks=out)
 
     @app.post("/api/p/<slug>/series/<int:sid>/pick")

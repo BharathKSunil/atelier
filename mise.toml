@@ -28,3 +28,7 @@ run = "python -m atelier.pipeline.score --db faces.db"
 [tasks.serve]
 description = "Phase 4 — web UI (reads $PORT, default 5050)"
 run = "python -m atelier.server --projects-dir ~/.atelier"
+
+[tasks.learn]
+description = "Phase 5 (optional) — train the learned pick head from feedback + buckets"
+run = "python -m atelier.pipeline.learn --db faces.db"

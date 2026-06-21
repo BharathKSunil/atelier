@@ -295,6 +295,25 @@ MIGRATIONS = [
             "ALTER TABLE images ADD COLUMN redundancy REAL",  # within-burst near-dup cosine
         ],
     ),
+    # v15 — learned pick-ranking head (scaffold). A thin correction over the per-image
+    # signals + the DINOv2 embedding, trained offline from feedback/buckets and written
+    # to images.learned_score; the model itself is persisted in learned_models so it can
+    # be reloaded/inspected. Heuristic scores stay untouched (a reversible add-on).
+    (
+        15,
+        [
+            "ALTER TABLE images ADD COLUMN learned_score REAL",
+            """CREATE TABLE IF NOT EXISTS learned_models (
+                 id INTEGER PRIMARY KEY,
+                 pick_type TEXT NOT NULL UNIQUE,
+                 weights BLOB NOT NULL,
+                 feature_names TEXT NOT NULL,
+                 n_pairs INTEGER,
+                 train_acc REAL,
+                 trained_at REAL
+               )""",
+        ],
+    ),
 ]
 
 SCHEMA_VERSION = max((v for v, _ in MIGRATIONS), default=0)

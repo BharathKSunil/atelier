@@ -73,6 +73,35 @@ def test_export_accepts_destination_under_allowed_root(app, client, tmp_path):
     assert r.get_json()["ok"] is True
 
 
+def test_picker_uses_learned_head_when_a_model_exists(app, client, tmp_path):
+    """A trained learned head supersedes the heuristic for its pick (group==print);
+    without a model the picker is unchanged."""
+    pdir = str(tmp_path / "projects")
+    projects.register_existing(pdir, "demo", str(tmp_path))
+    c = db.connect(projects.db_path(pdir, "demo"))
+    c.execute("INSERT INTO series(id, frame_count) VALUES(1, 2)")
+    # image 1 wins on the heuristic; image 2 wins on the learned score
+    ins = "INSERT INTO images(id, path, processed, series_id, print_score, learned_score) VALUES(?,?,1,1,?,?)"
+    c.execute(ins, (1, "/a", 0.9, 0.1))
+    c.execute(ins, (2, "/b", 0.2, 0.8))
+    c.commit()
+
+    def group_pick():
+        picks = client.get("/api/p/demo/series/1/picks").get_json()["picks"]
+        return next(p for p in picks if p["pick_type"] == "group")
+
+    g = group_pick()
+    assert g["image_id"] == 1 and g["source"] == "auto"  # heuristic in charge
+    c.execute(
+        "INSERT INTO learned_models(pick_type, weights, feature_names, n_pairs) VALUES('print', ?, '[]', 40)",
+        (b"\x00",),
+    )
+    c.commit()
+    c.close()
+    g = group_pick()
+    assert g["image_id"] == 2 and g["source"] == "learned"  # learned head takes over
+
+
 def test_export_persons_unions_images_and_contains_dest(app, client, tmp_path):
     pdir = str(tmp_path / "projects")
     projects.register_existing(pdir, "demo", str(tmp_path))

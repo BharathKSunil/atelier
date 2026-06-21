@@ -16,7 +16,11 @@ and [`docs/design/scoring-taxonomy.md`](design/scoring-taxonomy.md) (quality met
 
 **Deliberately NOT shipped** (would emit garbage without more): lead-room and mutual-gaze need a *calibrated* yaw sign (MediaPipe's transform doesn't give a reliable one); leading-lines (Hough) and subject-region motion-blur false-positive too often on real scenes to be worth it.
 
-**Still open in §5 — the learned heads** (NIMA aesthetic, RankNet pick regressor): need a labeled training run over `pick_feedback`/buckets, not just code. See [`design/scoring-taxonomy.md`](design/scoring-taxonomy.md) §5.
+**Learned pick head (scaffold) shipped** — db v15 + `atelier/learning.py` + `python -m atelier.pipeline.learn` (`mise run learn`). A pure-numpy logistic RankNet over the per-image signals + DINOv2 embedding, warm-started from the heuristic (weight 1.0 on the pick's own score column) and L2-regularized toward it, trained on within-burst preference PAIRS mined from `pick_feedback` + bucket keeps. Below `LEARN_MIN_PAIRS` (30) it refuses and keeps the heuristic. Predictions land in `images.learned_score`; the model persists in `learned_models`. The picker uses the learned score for a pick **only** once that pick has a trained model (`group`==`print`), so it's a no-op until there's feedback. Tested: learns an embedding signal the warm-start can't separate, the degrade floor, persistence, and the picker hand-off.
+
+**This needs the photographer's real feedback to actually help** — it's wired and verified on synthetic labels, but won't change picks until `pick_feedback`/bucket keeps accumulate on a real project, then `mise run learn`.
+
+**Still genuinely open in §5:** per-pick learned heads (one model trained at a time today), the NIMA-on-DINOv2 aesthetic head as a standalone, and the new-extract signals noted above. See [`design/scoring-taxonomy.md`](design/scoring-taxonomy.md) §5.
 
 ---
 

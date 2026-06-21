@@ -95,6 +95,13 @@ SHADOW_WARN = 0.18  # crushed-shadow area fraction that raises a flag
 CAST_WARN = 0.5  # color-cast value that raises a flag
 TILT_WARN = 0.5  # horizon-tilt value that raises a flag
 
+# Learned pick-ranking head (scaffold).
+LEARN_MIN_PAIRS = 30  # below this many labels, keep the heuristic (too few to trust)
+LEARN_L2 = 1.0  # regularization pulling the model toward the warm-start (current weights)
+LEARN_LR = 0.2  # SGD step
+LEARN_EPOCHS = 400
+LEARN_EMB_DIM = 384  # DINOv2 global embedding width
+
 # P2/P3 scene / focus / dup signals.
 CLUTTER_FALLOFF = 30.0  # mean background gradient that reads as a full clutter
 SYMMETRY_FALLOFF = 60.0  # mirror MAE that drives symmetry to 0
