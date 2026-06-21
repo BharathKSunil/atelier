@@ -750,7 +750,8 @@ def create_app(projects_dir):
         rows = c.execute(
             """SELECT id, path, print_score, is_best_in_series, global_sharpness, exposure_score,
                  taken_at, sub_sec, face_count,
-                 moment_score, cohesion, joy, comp_score, eyes_open_frac, smile_frac, front_frac, subject_size,
+                 moment_score, cohesion, joy, comp_score,
+                 eyes_open_frac, smile_frac, front_frac, gaze_frac, subject_size,
                  EXISTS(SELECT 1 FROM bucket_items WHERE image_id=images.id
                         AND bucket_id=(SELECT id FROM buckets WHERE is_default=1 ORDER BY id LIMIT 1)) AS is_print
                FROM images WHERE series_id=?
@@ -799,7 +800,7 @@ def create_app(projects_dir):
             f"""SELECT i.id, i.path, i.print_score, i.is_best_in_series, i.global_sharpness, i.exposure_score,
                  i.taken_at, i.sub_sec, i.face_count,
                  i.moment_score, i.cohesion, i.joy, i.comp_score, i.eyes_open_frac, i.smile_frac, i.front_frac,
-                 i.subject_size,
+                 i.gaze_frac, i.subject_size,
                  EXISTS(SELECT 1 FROM bucket_items WHERE image_id=i.id
                         AND bucket_id=(SELECT id FROM buckets WHERE is_default=1 ORDER BY id LIMIT 1)) AS is_print
                FROM images i

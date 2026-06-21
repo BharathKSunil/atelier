@@ -642,6 +642,7 @@ function fracChips(h) {
     <span class="frac ${low(h.eyes_open_frac) ? "warn" : ""}">${c(h.eyes_open_frac)} eyes open</span>
     <span class="frac">${c(h.smile_frac)} smiling</span>
     <span class="frac">${c(h.front_frac)} facing</span>
+    ${h.gaze_frac != null ? `<span class="frac">${c(h.gaze_frac)} eye contact</span>` : ""}
   </div>`;
 }
 

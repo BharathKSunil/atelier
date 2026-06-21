@@ -80,6 +80,12 @@ EYE_OPEN_THR = 0.5
 SMILE_THR = 0.35
 FRONT_THR = 0.5
 
+# P1 signals (MediaPipe blendshapes + head-pose transform).
+POSE_FRONTAL_FALLOFF = 45.0  # deg of combined yaw+pitch that drives frontality to 0
+GAZE_AWAY_FALLOFF = 0.6  # mean eyeLook* blendshape drive that drives gaze to 0
+DUCHENNE_BASE = 0.6  # mouth-only smile multiplier; full cheek-raise lifts it to 1.0
+GAZE_THR = 0.5  # eye-contact tag threshold ("6/8 eye contact")
+
 # Group pick: eyes stay important. eyes_term = a blend of the area-weighted mean
 # (a tiny background blink can't dominate) and the worst eye (a foreground blink hurts),
 # minus a per-straggler penalty. Continuous blur floor replaces the old ×0.25 step.

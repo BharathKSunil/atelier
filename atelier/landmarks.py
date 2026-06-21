@@ -37,20 +37,47 @@ def get_landmarker():
             base_options=mp_python.BaseOptions(model_asset_path=_ensure_model()),
             running_mode=vision.RunningMode.IMAGE,
             num_faces=1,
+            output_face_blendshapes=True,  # P1: per-eye blink, gaze, Duchenne smile
+            output_facial_transformation_matrixes=True,  # P1: head-pose Euler
         )
         _landmarker = vision.FaceLandmarker.create_from_options(opts)
     return _landmarker
 
 
-def landmarks_px(rgb_array):
-    """rgb_array: HxWx3 uint8 RGB. Returns (N, 2) pixel coords, or None if no face."""
+def _detect(rgb_array):
     import mediapipe as mp
 
-    res = get_landmarker().detect(mp.Image(image_format=mp.ImageFormat.SRGB, data=np.ascontiguousarray(rgb_array)))
+    return get_landmarker().detect(mp.Image(image_format=mp.ImageFormat.SRGB, data=np.ascontiguousarray(rgb_array)))
+
+
+def landmarks_px(rgb_array):
+    """rgb_array: HxWx3 uint8 RGB. Returns (N, 2) pixel coords, or None if no face."""
+    res = _detect(rgb_array)
     if not res.face_landmarks:
         return None
     h, w = rgb_array.shape[:2]
     return np.array([[p.x * w, p.y * h] for p in res.face_landmarks[0]], dtype=np.float64)
+
+
+def face_signals(rgb_array):
+    """Rich per-face signals from one FaceLandmarker pass. Returns a dict or None:
+      pts    : (N,2) mesh pixel coords — EAR / smile / frontality geometry fallback
+      blend  : {category_name: score} ARKit blendshapes (empty if unavailable)
+      matrix : 4x4 facial transformation matrix (np.ndarray) or None
+    """
+    res = _detect(rgb_array)
+    if not res.face_landmarks:
+        return None
+    h, w = rgb_array.shape[:2]
+    pts = np.array([[p.x * w, p.y * h] for p in res.face_landmarks[0]], dtype=np.float64)
+    blend = {}
+    if getattr(res, "face_blendshapes", None):
+        blend = {c.category_name: float(c.score) for c in res.face_blendshapes[0]}
+    matrix = None
+    mats = getattr(res, "facial_transformation_matrixes", None)
+    if mats:
+        matrix = np.asarray(mats[0], dtype=np.float64).reshape(4, 4)
+    return {"pts": pts, "blend": blend, "matrix": matrix}
 
 
 def has_face(rgb_array):

@@ -144,3 +144,48 @@ def test_candid_prefers_offaxis_smile():
     posed = quality.candid_score(0.7, 0.8, [_f(0.9, smile=0.1, front=0.95)])  # smiling little, very frontal
     candid = quality.candid_score(0.7, 0.8, [_f(0.9, smile=0.8, front=0.3)])  # smiling, off-axis
     assert candid > posed
+
+
+# ---------------------------------------------------------------- P1 signals
+def test_euler_identity_is_frontal():
+    yaw, pitch, roll = quality.euler_from_matrix(np.eye(4))
+    assert abs(yaw) < 1e-6 and abs(pitch) < 1e-6 and abs(roll) < 1e-6
+    assert quality.pose_frontality(yaw, pitch, roll) == 1.0
+
+
+def test_euler_yaw_recovered():
+    # 30° rotation about the vertical (Y) axis -> yaw magnitude ~30
+    t = np.radians(30.0)
+    r = np.array([[np.cos(t), 0, np.sin(t)], [0, 1, 0], [-np.sin(t), 0, np.cos(t)]])
+    m = np.eye(4)
+    m[:3, :3] = r
+    yaw, pitch, roll = quality.euler_from_matrix(m)
+    assert abs(abs(yaw) - 30.0) < 1e-3
+
+
+def test_pose_frontality_falls_off_and_roll_blind():
+    assert quality.pose_frontality(0, 0, 0) == 1.0
+    assert quality.pose_frontality(45, 0, 0) == 0.0  # at the falloff
+    assert quality.pose_frontality(0, 0, 40) == 1.0  # pure tilt still faces the lens
+    assert quality.pose_frontality(20, 0, 0) > quality.pose_frontality(35, 0, 0)
+
+
+def test_eye_open_from_blink_worst_eye():
+    assert quality.eye_open_from_blink(0.0, 0.0) == 1.0  # both wide open
+    assert quality.eye_open_from_blink(0.0, 1.0) == 0.0  # one shut -> penalized
+    assert quality.eye_open_from_blink(0.2, 0.1) == 0.8  # worst eye drives it
+
+
+def test_gaze_at_camera():
+    assert quality.gaze_at_camera([0, 0, 0, 0]) == 1.0  # eyes on the lens
+    assert quality.gaze_at_camera([0.6, 0.6, 0.6, 0.6]) == 0.0  # hard look-away
+    assert quality.gaze_at_camera([None, None]) is None  # no data
+    assert quality.gaze_at_camera([0.1, 0.0, 0.1, 0.0]) > quality.gaze_at_camera([0.5, 0.4, 0.3, 0.2])
+
+
+def test_genuine_smile_rewards_cheek_raise():
+    forced = quality.genuine_smile(0.9, 0.9, 0.0, 0.0)  # mouth only
+    real = quality.genuine_smile(0.9, 0.9, 0.9, 0.9)  # mouth + cheek crinkle
+    assert real > forced
+    assert quality.genuine_smile(0.0, 0.0, 0.9, 0.9) == 0.0  # no mouth smile -> not a smile
+    assert 0.0 <= forced <= 1.0 and 0.0 <= real <= 1.0

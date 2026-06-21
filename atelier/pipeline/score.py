@@ -24,10 +24,19 @@ R_EYE = [362, 385, 387, 263, 373, 380]
 LEFT_EYE_C, RIGHT_EYE_C, NOSE = 33, 263, 1
 MOUTH_L, MOUTH_R, LIP_TOP, LIP_BOT = 61, 291, 13, 14
 
+# ARKit blendshape category names (P1 robust signals)
+BLINK_L, BLINK_R = "eyeBlinkLeft", "eyeBlinkRight"
+SMILE_L, SMILE_R = "mouthSmileLeft", "mouthSmileRight"
+CHEEK_L, CHEEK_R = "cheekSquintLeft", "cheekSquintRight"
+LOOK_KEYS = [
+    "eyeLookInLeft", "eyeLookOutLeft", "eyeLookUpLeft", "eyeLookDownLeft",
+    "eyeLookInRight", "eyeLookOutRight", "eyeLookUpRight", "eyeLookDownRight",
+]  # fmt: skip
 
-def _landmarks(thumb_bytes):
+
+def _signals(thumb_bytes):
     arr = np.asarray(Image.open(io.BytesIO(thumb_bytes)).convert("RGB"))
-    return landmarks.landmarks_px(arr)
+    return landmarks.face_signals(arr)
 
 
 def main():
@@ -55,20 +64,42 @@ def main():
     faces = list(conn.execute(f"SELECT id, thumbnail, face_sharpness FROM faces {where}"))
     for f in tqdm(faces, desc="faces"):
         eye = sm = frontal = bright = 0.5
+        eye_l = eye_r = yaw = pitch = roll = gaze = genuine = None
         thumb = f["thumbnail"]
         if thumb:
             bright = quality.exposure_score(np.asarray(Image.open(io.BytesIO(thumb)).convert("L")))
             if have_mesh:
-                pts = _landmarks(thumb)
-                if pts is not None:
-                    eye = quality.eye_openness(quality.ear(pts[L_EYE]), quality.ear(pts[R_EYE]))
-                    frontal = quality.frontality(pts[LEFT_EYE_C], pts[RIGHT_EYE_C], pts[NOSE])
+                sig = _signals(thumb)
+                if sig is not None:
+                    pts, blend, mtx = sig["pts"], sig["blend"], sig["matrix"]
+                    # eyes: prefer the eyeBlink blendshapes, else fall back to EAR geometry
+                    if BLINK_L in blend and BLINK_R in blend:
+                        eye_l, eye_r = 1.0 - blend[BLINK_L], 1.0 - blend[BLINK_R]
+                        eye = quality.eye_open_from_blink(blend[BLINK_L], blend[BLINK_R])
+                    else:
+                        eye = quality.eye_openness(quality.ear(pts[L_EYE]), quality.ear(pts[R_EYE]))
+                    # frontality: prefer head-pose Euler, else nose-offset geometry
+                    if mtx is not None:
+                        yaw, pitch, roll = quality.euler_from_matrix(mtx)
+                        frontal = quality.pose_frontality(yaw, pitch, roll)
+                    else:
+                        frontal = quality.frontality(pts[LEFT_EYE_C], pts[RIGHT_EYE_C], pts[NOSE])
+                    # gaze + Duchenne smile (blendshape-only; null when unavailable)
+                    if any(k in blend for k in LOOK_KEYS):
+                        gaze = quality.gaze_at_camera([blend.get(k) for k in LOOK_KEYS])
+                    if SMILE_L in blend:
+                        genuine = quality.genuine_smile(
+                            blend.get(SMILE_L, 0.0), blend.get(SMILE_R, 0.0),
+                            blend.get(CHEEK_L, 0.0), blend.get(CHEEK_R, 0.0),
+                        )
+                    # keep the lip-ratio `smile` for display continuity
                     sm = quality.smile(pts[MOUTH_L], pts[MOUTH_R], pts[LIP_TOP], pts[LIP_BOT])
         sharp = f["face_sharpness"] or 0.0
         q = quality.face_quality(sharp, bright, eye, frontal, sm)
         conn.execute(
-            "UPDATE faces SET eye_open=?, smile=?, frontality=?, quality_score=? WHERE id=?",
-            (eye, sm, frontal, q, f["id"]),
+            """UPDATE faces SET eye_open=?, smile=?, frontality=?, quality_score=?,
+               eye_left=?, eye_right=?, yaw=?, pitch=?, roll=?, gaze=?, genuine_smile=? WHERE id=?""",
+            (eye, sm, frontal, q, eye_l, eye_r, yaw, pitch, roll, gaze, genuine, f["id"]),
         )
     conn.commit()
 
@@ -91,7 +122,8 @@ def main():
     ).fetchall():
         fr = list(
             conn.execute(
-                "SELECT eye_open, smile, frontality, bbox_x1, bbox_y1, bbox_x2, bbox_y2 FROM faces WHERE image_id=?",
+                """SELECT eye_open, smile, frontality, gaze, bbox_x1, bbox_y1, bbox_x2, bbox_y2
+                       FROM faces WHERE image_id=?""",
                 (im["id"],),
             )
         )
@@ -112,6 +144,7 @@ def main():
         eyes = [f["eye"] for f in faces]
         smiles = [f["smile"] for f in faces]
         fronts = [f["front"] for f in faces]
+        gazes = [r["gaze"] for r in fr if r["gaze"] is not None]
         ex = im["exposure_score"] or 0.0
         # monotone squash on raw sharpness (no more cap-500 saturation); fall back
         # to the stored normalized value for pre-Phase-1 rows without raw.
@@ -128,7 +161,7 @@ def main():
         conn.execute(
             """UPDATE images SET global_sharpness=?, aesthetic_score=?, candid_score=?, print_score=?,
                moment_score=?, cohesion=?, joy=?, comp_score=?,
-               eyes_open_frac=?, smile_frac=?, front_frac=?, eyes_min=?, subject_size=? WHERE id=?""",
+               eyes_open_frac=?, smile_frac=?, front_frac=?, gaze_frac=?, eyes_min=?, subject_size=? WHERE id=?""",
             (
                 gs,
                 quality.aesthetic_proxy(rgb, gs, ex),
@@ -141,6 +174,7 @@ def main():
                 quality.fraction_at_least(eyes, config.EYE_OPEN_THR),
                 quality.fraction_at_least(smiles, config.SMILE_THR),
                 quality.fraction_at_least(fronts, config.FRONT_THR),
+                quality.fraction_at_least(gazes, config.GAZE_THR),
                 (min(eyes) if eyes else None),
                 subject_size,
                 im["id"],

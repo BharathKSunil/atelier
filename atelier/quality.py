@@ -93,6 +93,63 @@ def smile(mouth_left, mouth_right, lip_top, lip_bottom):
     return float(np.clip((h / (w + 1e-6)) * 2.5, 0.0, 1.0))
 
 
+# --------------------------------------------- P1: MediaPipe blendshapes + head pose
+# Richer, more robust signals than the bare mesh geometry above. All pure math over
+# values the score phase reads from one FaceLandmarker pass (blendshape scores in
+# [0,1]; a 4x4 facial-transformation matrix). Each degrades to the geometry signals
+# when blendshapes/the transform are unavailable.
+def euler_from_matrix(matrix):
+    """(yaw, pitch, roll) in degrees from a face transform matrix (rotation in the
+    upper-left 3x3). yaw = head turn L/R, pitch = nod up/down, roll = tilt. Standard
+    ZYX decomposition; sign conventions may vary, so frontality uses magnitudes only."""
+    m = np.asarray(matrix, dtype=np.float64)
+    r = m[:3, :3]
+    sy = float(np.hypot(r[0, 0], r[1, 0]))
+    if sy > 1e-6:
+        pitch = np.degrees(np.arctan2(r[2, 1], r[2, 2]))
+        yaw = np.degrees(np.arctan2(-r[2, 0], sy))
+        roll = np.degrees(np.arctan2(r[1, 0], r[0, 0]))
+    else:  # gimbal lock
+        pitch = np.degrees(np.arctan2(-r[1, 2], r[1, 1]))
+        yaw = np.degrees(np.arctan2(-r[2, 0], sy))
+        roll = 0.0
+    return float(yaw), float(pitch), float(roll)
+
+
+def pose_frontality(yaw, pitch, roll):
+    """1.0 = head facing the lens; falls off with combined yaw+pitch deviation. Roll
+    (tilt) does NOT reduce facing — a tilted head still looks at the camera. [0,1]."""
+    dev = float(np.hypot(yaw, pitch))  # symmetric in yaw/pitch -> sign/axis-swap robust
+    return float(np.clip(1.0 - dev / config.POSE_FRONTAL_FALLOFF, 0.0, 1.0))
+
+
+def eye_open_from_blink(blink_left, blink_right):
+    """Combined eye openness from the eyeBlink blendshapes (0=open .. 1=closed). Worst
+    eye drives it (one shut eye is penalized), matching the EAR-min convention. [0,1]."""
+    ol = 1.0 - float(np.clip(blink_left, 0.0, 1.0))
+    orr = 1.0 - float(np.clip(blink_right, 0.0, 1.0))
+    return float(min(ol, orr))
+
+
+def gaze_at_camera(look_offsets):
+    """Looking-at-lens score from the eyeLook* blendshapes (in/out/up/down per eye,
+    each 0..1). All near 0 => eyes on the lens; a strong look-away -> ~0. None if no
+    values."""
+    vals = [abs(float(x)) for x in look_offsets if x is not None]
+    if not vals:
+        return None
+    drive = sum(vals) / len(vals)
+    return float(np.clip(1.0 - drive / config.GAZE_AWAY_FALLOFF, 0.0, 1.0))
+
+
+def genuine_smile(smile_left, smile_right, cheek_left, cheek_right):
+    """Duchenne (genuine) smile [0,1]: mouth smile gated by cheek-raise (eye crinkle).
+    A mouth-only 'say cheese' scores lower than a cheek-co-activated real smile."""
+    sm = 0.5 * (float(np.clip(smile_left, 0.0, 1.0)) + float(np.clip(smile_right, 0.0, 1.0)))
+    ch = 0.5 * (float(np.clip(cheek_left, 0.0, 1.0)) + float(np.clip(cheek_right, 0.0, 1.0)))
+    return float(np.clip(sm * (config.DUCHENNE_BASE + (1.0 - config.DUCHENNE_BASE) * ch), 0.0, 1.0))
+
+
 def kps_plausible(kps, box):
     """Anatomical sanity on the detector's 5 keypoints [left_eye, right_eye, nose,
     mouth_left, mouth_right] (image coords). Rejects the collapsed/impossible

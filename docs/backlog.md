@@ -6,7 +6,9 @@ and [`docs/design/scoring-taxonomy.md`](design/scoring-taxonomy.md) (quality met
 
 **Order of work:** bugs ✅ → metrics taxonomy P0 ✅ → features easiest → hardest (F1 → F4 → F2 → F3).
 
-**Done so far:** B1 + B2 fixed (`runner.py`). Metrics taxonomy **P0 shipped** — every photo is now analysed on every metric (stored as columns in `images`), with context-aware picks (group eyes-strict, moment soft-on-eyes, everyone/smile/candid/aesthetic), plain-language tags ("7/8 eyes open"), and 6 ratable feedback rows. See [`design/scoring-taxonomy.md`](design/scoring-taxonomy.md) §5 for the remaining P1 (MediaPipe extractions: per-eye blink, genuine smile, head-pose, gaze, skin-tone exposure, subject-vs-bg sharpness) and P2 (learned aesthetic head trained on `pick_feedback`).
+**Done so far:** B1 + B2 fixed (`runner.py`). Metrics taxonomy **P0 shipped** — every photo is now analysed on every metric (stored as columns in `images`), with context-aware picks (group eyes-strict, moment soft-on-eyes, everyone/smile/candid/aesthetic), plain-language tags ("7/8 eyes open"), and 6 ratable feedback rows.
+
+**Metrics taxonomy P1 (extractions) shipped** — the score phase now reads MediaPipe **blendshapes** + the **head-pose transform** from one FaceLandmarker pass (db v12 face columns): independent per-eye blink (`eye_left`/`eye_right`, robust `eye_open`), head-pose Euler (`yaw`/`pitch`/`roll` → pose-based frontality, roll-blind), gaze-at-camera (`gaze` + a "N/N eye contact" tag), and a Duchenne genuine-smile signal (`genuine_smile`). All degrade gracefully to the EAR/geometry signals when blendshapes are unavailable. Verified end-to-end on a real face. Also **fixed a migration-ordering bug** (v11 was applied before v10, skipping v10's columns on upgrading DBs) + added a column self-heal. See [`design/scoring-taxonomy.md`](design/scoring-taxonomy.md) §5 for remaining P1 (skin-tone exposure, subject-vs-bg sharpness, horizon, color cast) and P2 (learned aesthetic head trained on `pick_feedback`).
 
 ---
 
