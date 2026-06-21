@@ -185,6 +185,63 @@ MIGRATIONS = [
             "CREATE INDEX IF NOT EXISTS idx_bucket_items_bucket_added ON bucket_items(bucket_id, added_at, image_id)",
         ],
     ),
+    # v9 — dogfooding feedback: capture verdicts on the auto criterion-picks
+    # (group/candid/aesthetic) so the scorer can be retrained. Anchored on the
+    # auto image_id + pick_type (the only re-run-stable key — series ids are rebuilt
+    # every 02b run), with an optional "the better frame was X" correction. Also a
+    # per-series reviewed flag so the cull position/progress survives reload.
+    (
+        9,
+        [
+            """CREATE TABLE IF NOT EXISTS pick_feedback (
+             id INTEGER PRIMARY KEY,
+             pick_type TEXT NOT NULL,
+             auto_image_id INTEGER NOT NULL REFERENCES images(id),
+             verdict TEXT NOT NULL,                 -- 'good' | 'bad'
+             better_image_id INTEGER REFERENCES images(id),
+             note TEXT,
+             created_at REAL,
+             UNIQUE(pick_type, auto_image_id)
+           )""",
+            "CREATE INDEX IF NOT EXISTS idx_feedback_auto ON pick_feedback(auto_image_id)",
+            "ALTER TABLE series ADD COLUMN reviewed_at REAL",
+        ],
+    ),
+    # v11 — the print list IS a bucket. Buckets gain a role + a per-project default
+    # (the spacebar target). The old print picks (pick_type='print') migrate into a
+    # default "Print list" bucket so everything is one unified collection model.
+    (
+        11,
+        [
+            "ALTER TABLE buckets ADD COLUMN role TEXT",
+            "ALTER TABLE buckets ADD COLUMN is_default INTEGER DEFAULT 0",
+            """INSERT INTO buckets(name, color, role, is_default, sort_order, created_at)
+               SELECT 'Print list', '#c64a5b', 'print', 1, -1, CAST(strftime('%s','now') AS REAL)
+               WHERE NOT EXISTS (SELECT 1 FROM buckets WHERE role='print')""",
+            """INSERT OR IGNORE INTO bucket_items(bucket_id, image_id, added_at)
+               SELECT (SELECT id FROM buckets WHERE role='print' LIMIT 1), image_id,
+                 CAST(strftime('%s','now') AS REAL)
+               FROM picks WHERE pick_type='print'""",
+            "DELETE FROM picks WHERE pick_type='print'",
+        ],
+    ),
+    # v10 — richer per-image quality metrics ("all the tags"). Computed in the score
+    # phase from already-stored per-face signals (no re-index). Back context-aware
+    # picks (everyone/smile/moment) + the plain-language fraction tags shown in Review.
+    (
+        10,
+        [
+            "ALTER TABLE images ADD COLUMN moment_score REAL",  # decisive frame, soft eyes
+            "ALTER TABLE images ADD COLUMN cohesion REAL",  # 'everyone engaged'
+            "ALTER TABLE images ADD COLUMN joy REAL",  # biggest smile in the frame
+            "ALTER TABLE images ADD COLUMN comp_score REAL",  # crop-safety + thirds + headroom
+            "ALTER TABLE images ADD COLUMN eyes_open_frac REAL",  # fraction of faces eyes-open
+            "ALTER TABLE images ADD COLUMN smile_frac REAL",  # fraction smiling
+            "ALTER TABLE images ADD COLUMN front_frac REAL",  # fraction facing the camera
+            "ALTER TABLE images ADD COLUMN eyes_min REAL",  # worst eye (group-strict signal)
+            "ALTER TABLE images ADD COLUMN subject_size REAL",  # largest face area fraction
+        ],
+    ),
 ]
 
 SCHEMA_VERSION = MIGRATIONS[-1][0] if MIGRATIONS else 0
