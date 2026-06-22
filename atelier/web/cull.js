@@ -13,6 +13,16 @@ const META = {
   aesthetic: { label: "Striking", desc: "Most visually striking frame." },
 };
 const ORDER = ["group", "everyone", "smile", "candid", "moment", "aesthetic"];
+// tiny monochrome glyphs for the filmstrip pick tags (label kept as the tooltip)
+const TAG_ICON = {
+  group: '<svg viewBox="0 0 16 16"><circle cx="5.5" cy="7.5" r="2.4"/><circle cx="10.5" cy="7.5" r="2.4"/></svg>',
+  everyone:
+    '<svg viewBox="0 0 16 16"><path d="M2 8c2-3.2 10-3.2 12 0-2 3.2-10 3.2-12 0Z"/><circle cx="8" cy="8" r="1.5"/></svg>',
+  smile: '<svg viewBox="0 0 16 16"><path d="M5.4 5.8v.9M10.6 5.8v.9M4.6 9.3c1.4 2.2 5.4 2.2 6.8 0"/></svg>',
+  candid: '<svg viewBox="0 0 16 16"><path d="M2 9.6c1.7-3.4 3.6 1.7 5.4-1.1s2-3.4 6.4-1.4"/></svg>',
+  moment: '<svg viewBox="0 0 16 16"><path d="M8 2.2 9.3 6.7 13.8 8 9.3 9.3 8 13.8 6.7 9.3 2.2 8 6.7 6.7Z"/></svg>',
+  aesthetic: '<svg viewBox="0 0 16 16"><path d="M8 2.4 13.6 8 8 13.6 2.4 8Z"/></svg>',
+};
 const FILTER_MODE_LABEL = { solo: "solo", group: "with others", together: "together", only: "only these" };
 const LAYOUT_KEY = "atelier:rv-layout3"; // bumped: faces now float over the photo; panel = quality+feedback
 const DEFAULT_LAYOUT = { inspW: 320, stripH: 142, inspOpen: true, inspSide: "right" };
@@ -292,7 +302,11 @@ function render() {
   // filmstrip — STABLE capture order; featured highlighted in place (no hoisting)
   document.getElementById("rv-strip").innerHTML = frames
     .map((f) => {
-      const chips = (byImg[f.id] || []).map((p) => `<span class="ftag ${p.source}">${META[p.t].label}</span>`).join("");
+      const chips = (byImg[f.id] || [])
+        .map(
+          (p) => `<span class="ftag ${p.source}" title="${escapeHtml(META[p.t].label)}">${TAG_ICON[p.t] || ""}</span>`,
+        )
+        .join("");
       const bdots = [...(imgBuckets[f.id] || [])]
         .map((bid) => {
           const b = buckets.find((x) => x.id === bid);
@@ -392,17 +406,7 @@ function renderInspector() {
       ${ORDER.map(feedbackRow).join("")}
       <button class="btn ghost tiny" id="fb-export" title="Download all feedback as JSON">Export feedback ↓</button>
     </details>`
-    }
-    <details class="insp-sec insp-keys">
-      <summary class="insp-head">Keyboard</summary>
-      <div class="keys-grid">
-        <span><kbd>←</kbd><kbd>→</kbd> bursts</span><span><kbd>↑</kbd><kbd>↓</kbd> frames</span>
-        <span><kbd>Space</kbd> ${escapeHtml((defaultBucket() || {}).name || "print list")}</span><span><kbd>1</kbd>–<kbd>9</kbd> buckets</span>
-        <span><kbd>G</kbd><kbd>C</kbd><kbd>A</kbd> tag</span><span><kbd>Tab</kbd> people</span>
-        <span><kbd>R</kbd> rename</span><span><kbd>Z</kbd> zoom</span>
-        <span><kbd>I</kbd> panel</span><span><kbd>F</kbd> full</span>
-      </div>
-    </details>`;
+    }`;
 
   el.querySelectorAll(".insp-face").forEach((row) => {
     row.onclick = () => openFaceModal(slug, +row.dataset.fid);
