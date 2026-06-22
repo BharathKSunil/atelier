@@ -25,6 +25,8 @@ The face/recognition stack (`hdbscan`, `insightface`, `mediapipe`) ships prebuil
 
 > The server is loopback-only (`127.0.0.1`) and unauthenticated. Do not expose it to a network.
 
+> **Network behaviour & telemetry.** After the one-time model download, Atelier makes no network calls of its own and never uploads your photos or any derived data. Be aware of one third-party exception: a bundled model library, **Google's MediaPipe**, attempts an anonymous usage ping (its "clearcut" logger) during the score pass — you'll see a harmless `Failed to send to clearcut …` line in the run log. It carries **none of your image data**, fails the moment you're offline, and Atelier never initiates it. Run the machine offline after setup, or firewall the process, for an airtight guarantee.
+
 ### First run & models
 
 The first index downloads `buffalo_l` (~280 MB, insightface) and DINOv2 (~85 MB, via `torch.hub`), plus AdaFace (~250 MB) only when `RECOGNITION_MODEL="adaface"`. Weights are cached under `~/.insightface` and the torch hub cache, so subsequent runs are offline — but the **first index needs internet**.

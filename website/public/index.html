@@ -449,11 +449,16 @@
             <div class="pv">
               <b>0 uploads</b
               ><span
-                >After a one-time model download (~350–600&nbsp;MB), everything runs offline. No telemetry, no
-                cloud.</span
+                >After a one-time model download (~350–600&nbsp;MB), the pipeline runs offline. Atelier makes no network
+                calls of its own and sends none of your photos — ever.</span
               >
             </div>
           </div>
+          <p class="privacy-fine">
+            Full disclosure: one bundled model library (Google's MediaPipe) attempts an anonymous usage ping during
+            scoring. It carries none of your images, fails the moment you're offline, and Atelier never initiates it —
+            firewall the process if you want it airtight.
+          </p>
         </div>
       </section>
 
