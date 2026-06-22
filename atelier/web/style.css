@@ -1093,64 +1093,64 @@ h3 {
 .frame-thumb.star {
   border-color: var(--gold);
 }
+/* pick tags — compact, bottom-anchored so they don't smother the face */
 .frame-thumb .tags {
   position: absolute;
-  top: 5px;
-  left: 5px;
-  right: 5px;
+  bottom: 4px;
+  left: 4px;
+  right: 4px;
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
+  gap: 3px;
 }
 .ftag {
-  font-size: 9.5px;
-  font-weight: 700;
-  letter-spacing: 0.03em;
-  padding: 2px 7px;
-  border-radius: 999px;
-  text-transform: uppercase;
-  backdrop-filter: blur(2px);
+  font-size: 8.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: lowercase;
+  padding: 1.5px 6px;
+  border-radius: 4px;
+  line-height: 1.35;
+  background: rgba(14, 12, 8, 0.62);
+  color: var(--ink-dim);
+  backdrop-filter: blur(3px);
 }
-.ftag.crit {
+.ftag.manual {
+  /* a user-set pick stands out in gold; auto picks stay quiet */
   background: rgba(205, 163, 92, 0.92);
   color: #1a1a1a;
+  font-weight: 700;
 }
-.ftag.crit.auto {
-  background: rgba(40, 34, 23, 0.85);
+.frame-star {
+  position: absolute;
+  top: 4px;
+  right: 5px;
   color: var(--gold);
-  box-shadow: inset 0 0 0 1px var(--gold-soft);
-}
-.ftag.print {
-  background: var(--accent);
-  color: #fff;
+  font-size: 12px;
+  line-height: 1;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.85);
+  z-index: 2;
 }
 
-/* compact floating help */
-.help-fab {
-  position: absolute;
-  bottom: 130px;
-  left: 50%;
-  transform: translateX(-50%);
-  background: rgba(20, 16, 11, 0.78);
-  border: 1px solid var(--line);
+/* keyboard reference, relocated into the inspector panel */
+.insp-keys .keys-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 14px;
+  margin-top: 12px;
+  font-size: 11.5px;
   color: var(--muted);
-  padding: 7px 16px;
-  border-radius: 999px;
-  font-size: 12px;
-  backdrop-filter: blur(8px);
-  opacity: 0.55;
-  transition: opacity 0.2s;
-  pointer-events: none;
-  z-index: 5;
-  white-space: nowrap;
 }
-.review:hover .help-fab {
-  opacity: 0.9;
-}
-.help-fab span {
-  color: var(--gold);
+.insp-keys kbd {
+  font-family: var(--sans);
+  font-size: 10px;
   font-weight: 700;
-  margin: 0 1px;
+  color: var(--gold);
+  background: var(--raised);
+  border: 1px solid var(--line-soft);
+  border-radius: 4px;
+  padding: 1px 5px;
+  margin-right: 2px;
 }
 
 /* ---------- people ---------- */
@@ -1225,35 +1225,6 @@ h3 {
 }
 
 /* ---------- buckets ---------- */
-.bucket-strip {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 30px;
-  border-top: 1px solid var(--line-soft);
-  background: var(--panel);
-}
-.bucket-hint {
-  color: var(--faint);
-  font-size: 12px;
-  font-style: italic;
-}
-.bk-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  border: 1px solid var(--line);
-  background: #1a150f;
-  color: var(--ink-dim);
-  border-radius: 999px;
-  padding: 6px 13px 6px 8px;
-  font-size: 12.5px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: 0.15s;
-}
-.bk-chip .k,
 .bucket-tab .k {
   display: inline-flex;
   align-items: center;
@@ -1264,18 +1235,6 @@ h3 {
   background: var(--line);
   color: var(--ink);
   font-size: 10px;
-}
-.bk-chip:hover {
-  border-color: var(--bc);
-}
-.bk-chip.on {
-  border-color: var(--bc);
-  background: color-mix(in srgb, var(--bc) 22%, transparent);
-  color: var(--ink);
-}
-.bk-chip.on .k {
-  background: var(--bc);
-  color: #fff;
 }
 .bk-dots {
   position: absolute;

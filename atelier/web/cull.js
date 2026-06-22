@@ -292,9 +292,7 @@ function render() {
   // filmstrip — STABLE capture order; featured highlighted in place (no hoisting)
   document.getElementById("rv-strip").innerHTML = frames
     .map((f) => {
-      const chips =
-        (byImg[f.id] || []).map((p) => `<span class="ftag crit ${p.source}">${META[p.t].label}</span>`).join("") +
-        (f.is_print ? `<span class="ftag print">★ ${escapeHtml(dbName)}</span>` : "");
+      const chips = (byImg[f.id] || []).map((p) => `<span class="ftag ${p.source}">${META[p.t].label}</span>`).join("");
       const bdots = [...(imgBuckets[f.id] || [])]
         .map((bid) => {
           const b = buckets.find((x) => x.id === bid);
@@ -305,7 +303,8 @@ function render() {
       return `<div class="frame-thumb ${f.id === heroId ? "cur" : ""} ${f.is_print ? "star" : ""}" data-id="${f.id}"
         role="button" tabindex="0" aria-label="${alt}" aria-pressed="${f.id === heroId}">
         <img loading="lazy" src="/api/p/${slug}/image_thumb/${f.id}" alt="${alt}">
-        <div class="tags">${chips}</div>${bdots ? `<div class="bk-dots">${bdots}</div>` : ""}</div>`;
+        ${f.is_print ? `<span class="frame-star" title="In ${escapeHtml(dbName)}">★</span>` : ""}
+        ${chips ? `<div class="tags">${chips}</div>` : ""}${bdots ? `<div class="bk-dots">${bdots}</div>` : ""}</div>`;
     })
     .join("");
   document.querySelectorAll("#rv-strip .frame-thumb").forEach((el) => {
@@ -326,7 +325,6 @@ function render() {
     };
   });
 
-  renderBucketStrip();
   renderInspector();
 }
 
@@ -394,7 +392,17 @@ function renderInspector() {
       ${ORDER.map(feedbackRow).join("")}
       <button class="btn ghost tiny" id="fb-export" title="Download all feedback as JSON">Export feedback ↓</button>
     </details>`
-    }`;
+    }
+    <details class="insp-sec insp-keys">
+      <summary class="insp-head">Keyboard</summary>
+      <div class="keys-grid">
+        <span><kbd>←</kbd><kbd>→</kbd> bursts</span><span><kbd>↑</kbd><kbd>↓</kbd> frames</span>
+        <span><kbd>Space</kbd> ${escapeHtml((defaultBucket() || {}).name || "print list")}</span><span><kbd>1</kbd>–<kbd>9</kbd> buckets</span>
+        <span><kbd>G</kbd><kbd>C</kbd><kbd>A</kbd> tag</span><span><kbd>Tab</kbd> people</span>
+        <span><kbd>R</kbd> rename</span><span><kbd>Z</kbd> zoom</span>
+        <span><kbd>I</kbd> panel</span><span><kbd>F</kbd> full</span>
+      </div>
+    </details>`;
 
   el.querySelectorAll(".insp-face").forEach((row) => {
     row.onclick = () => openFaceModal(slug, +row.dataset.fid);
@@ -728,31 +736,6 @@ async function exportFeedback() {
   } catch {
     toast("Could not export feedback", true);
   }
-}
-
-function renderBucketStrip() {
-  const el = document.getElementById("rv-buckets");
-  if (!el) return;
-  if (!buckets.length) {
-    el.innerHTML = `<span class="bucket-hint">No buckets yet — create them in the Buckets tab, then press 1–9 here.</span>`;
-    return;
-  }
-  const h = hero();
-  const inSet = (h && imgBuckets[h.id]) || new Set();
-  el.innerHTML = buckets
-    .map(
-      (b, i) =>
-        `<button class="bk-chip ${inSet.has(b.id) ? "on" : ""}" data-id="${b.id}" style="--bc:${escapeHtml(b.color || "#cda35c")}">
-           <span class="k">${i < 9 ? i + 1 : "•"}</span>${b.is_default ? "★ " : ""}${escapeHtml(b.name)}</button>`,
-    )
-    .join("");
-  el.querySelectorAll(".bk-chip").forEach((c) => {
-    c.onclick = () => {
-      const b = buckets.find((x) => x.id === +c.dataset.id);
-      const h2 = hero();
-      if (b && h2) toggleBucket(b, h2.id);
-    };
-  });
 }
 
 async function toggleBucket(b, imageId) {
