@@ -83,10 +83,7 @@ def _series_of(conn, image_id):
 def _siblings(conn, series_id, exclude_id):
     if series_id is None:
         return []
-    return [
-        r["id"]
-        for r in conn.execute("SELECT id FROM images WHERE series_id=? AND id<>?", (series_id, exclude_id))
-    ]
+    return [r["id"] for r in conn.execute("SELECT id FROM images WHERE series_id=? AND id<>?", (series_id, exclude_id))]
 
 
 def _in_any_bucket(conn, image_id):

@@ -2,6 +2,7 @@
 pytest>=7.4
 numpy>=1.24,<2.0
 pillow>=10.0
+tqdm>=4.66          # pipeline modules (index/score) import it at top; tests import them
 flask>=3.0          # tests/test_server.py exercises the Flask security guards
 ruff>=0.6           # lint + format (make lint / make format)
 build>=1.2          # wheel + sdist (make build)

@@ -97,8 +97,10 @@ def main():
                         gaze = quality.gaze_at_camera([blend.get(k) for k in LOOK_KEYS])
                     if SMILE_L in blend:
                         genuine = quality.genuine_smile(
-                            blend.get(SMILE_L, 0.0), blend.get(SMILE_R, 0.0),
-                            blend.get(CHEEK_L, 0.0), blend.get(CHEEK_R, 0.0),
+                            blend.get(SMILE_L, 0.0),
+                            blend.get(SMILE_R, 0.0),
+                            blend.get(CHEEK_L, 0.0),
+                            blend.get(CHEEK_R, 0.0),
                         )
                     # keep the lip-ratio `smile` for display continuity
                     sm = quality.smile(pts[MOUTH_L], pts[MOUTH_R], pts[LIP_TOP], pts[LIP_BOT])
@@ -192,8 +194,12 @@ def main():
         # bokeh: the largest (subject) face's sharpness vs the background acutance
         subj_sharp = None
         if fr:
-            subj = max(fr, key=lambda r: quality.face_area(
-                (r["bbox_x1"] or 0, r["bbox_y1"] or 0, r["bbox_x2"] or 0, r["bbox_y2"] or 0)))
+            subj = max(
+                fr,
+                key=lambda r: quality.face_area(
+                    (r["bbox_x1"] or 0, r["bbox_y1"] or 0, r["bbox_x2"] or 0, r["bbox_y2"] or 0)
+                ),
+            )
             subj_sharp = subj["face_sharpness_raw"]
         bokeh = quality.bokeh_ratio(subj_sharp, im["bg_sharpness_raw"])
         # P2/P3 scene signals over the thumbnail (face boxes mapped to thumbnail coords)

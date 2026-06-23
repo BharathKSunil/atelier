@@ -61,9 +61,9 @@ def landmarks_px(rgb_array):
 
 def face_signals(rgb_array):
     """Rich per-face signals from one FaceLandmarker pass. Returns a dict or None:
-      pts    : (N,2) mesh pixel coords — EAR / smile / frontality geometry fallback
-      blend  : {category_name: score} ARKit blendshapes (empty if unavailable)
-      matrix : 4x4 facial transformation matrix (np.ndarray) or None
+    pts    : (N,2) mesh pixel coords — EAR / smile / frontality geometry fallback
+    blend  : {category_name: score} ARKit blendshapes (empty if unavailable)
+    matrix : 4x4 facial transformation matrix (np.ndarray) or None
     """
     res = _detect(rgb_array)
     if not res.face_landmarks:
