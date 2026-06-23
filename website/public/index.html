@@ -56,10 +56,8 @@
         <span>Atelier</span>
       </a>
       <nav class="nav-links" aria-label="Primary">
-        <a href="#why">Why</a>
-        <a href="#how">Workflow</a>
-        <a href="#demo">Live demo</a>
-        <a href="#features">Features</a>
+        <a href="#tour">The tour</a>
+        <a href="#privacy">Privacy</a>
         <a href="#install">Install</a>
         <a class="nav-cta" href="https://github.com/bharathksunil/atelier" target="_blank" rel="noopener">GitHub ↗</a>
       </nav>
@@ -81,41 +79,34 @@
               of every burst.
             </h1>
             <p class="lede reveal">
-              Atelier browses a large local photo library by who's <em>in</em> the photo, then picks the single best
-              frame of each burst — without renaming, moving, or modifying a single original. You don't have to be a
-              pro: if you have <strong>too many photos</strong>, it's for you. Everything stays on your machine.
+              A culling desk for libraries too big for the cloud — a wedding, a year of family photos, a whole trip.
+              Atelier reads every frame and surfaces the keeper, <strong>without touching a single original.</strong>
             </p>
-            <div class="hero-jobs reveal">
-              <span class="job"><b>01</b> Group by face — cluster people, browse by who's in the frame.</span>
-              <span class="job"
-                ><b>02</b> Best of a burst — score every frame for its intent, keep the one that earns it.</span
-              >
-              <span class="job"
-                ><b>03</b> Cull your way — your buckets, your print list, a model that learns your eye.</span
-              >
-            </div>
             <div class="hero-actions reveal">
-              <a class="btn btn-gold" href="#demo">Try the live demo ↓</a>
-              <a class="btn btn-ghost" href="#how">See how it works</a>
+              <a class="btn btn-gold" href="#tour">See it work ↓</a>
+              <a class="btn btn-ghost" href="https://github.com/bharathksunil/atelier" target="_blank" rel="noopener"
+                >GitHub ↗</a
+              >
             </div>
             <p class="hero-note reveal">
-              Built for any library too big for the cloud — a wedding, a year of family photos, a whole trip:
-              <strong>20,000+ images, multiple terabytes</strong>, all reviewed on your own machine.
+              Real screenshots below — a live <strong>5,592-photo wedding</strong>, 12,626 faces, 907 bursts. Faces
+              blurred for privacy.
             </p>
           </div>
 
-          <!-- decorative contact-sheet strip -->
-          <div class="hero-sheet reveal" aria-hidden="true">
-            <div class="sheet-rail">
-              <div class="sheet-frame" data-seed="vows-1"></div>
-              <div class="sheet-frame pick" data-seed="vows-2"><span class="sheet-star">★</span></div>
-              <div class="sheet-frame" data-seed="vows-3"></div>
-              <div class="sheet-frame dim" data-seed="vows-4"><span class="sheet-x">eyes closed</span></div>
-              <div class="sheet-frame" data-seed="vows-5"></div>
-              <div class="sheet-frame" data-seed="vows-6"></div>
-            </div>
-            <p class="sheet-cap">one burst · 6 frames · <span class="g">1 keeper</span></p>
-          </div>
+          <!-- hero screenshot: the review desk -->
+          <figure class="hero-shot reveal" data-full="assets/shots/hero-review.webp">
+            <div class="shot-chrome" aria-hidden="true"><span></span><span></span><span></span></div>
+            <img
+              src="assets/shots/hero-review.webp"
+              alt="Atelier's review desk: one burst on the stage, frame-quality bars and bucket chips alongside."
+              loading="eager"
+              decoding="async"
+              width="3200"
+              height="1702"
+            />
+            <figcaption>Review desk · the keeper of a 33-frame burst</figcaption>
+          </figure>
         </div>
       </section>
 
@@ -131,187 +122,134 @@
         </div>
       </div>
 
-      <!-- ───────────────────────── why ───────────────────────── -->
-      <section class="section why" id="why">
+      <!-- ───────────────────────── tour ───────────────────────── -->
+      <section class="section tour" id="tour">
         <div class="section-head reveal">
-          <span class="kicker">The problem</span>
-          <h2>
-            A wedding — or a year of phone photos — is <em>thousands of frames.</em><br />You want the
-            <em>few</em> worth keeping.
-          </h2>
-        </div>
-        <div class="why-grid">
-          <article class="why-card reveal">
-            <div class="why-num">TB</div>
-            <h3>Too big to upload</h3>
-            <p>
-              A shoot, a trip, or a whole family archive can be terabytes of photos and bursts. Pushing that to a web
-              service is a painstaking, days-long task — so Atelier never asks you to. It indexes the folder where it
-              already lives.
-            </p>
-          </article>
-          <article class="why-card reveal">
-            <div class="why-num">∿</div>
-            <h3>Bursts, not photos</h3>
-            <p>
-              You didn't take 6,000 photos — you took 900 moments, six frames each. The job isn't rating every frame;
-              it's finding the one frame per moment where nobody blinked. Atelier groups the burst and scores the whole
-              frame, group-aware.
-            </p>
-          </article>
-          <article class="why-card reveal">
-            <div class="why-num">⌘</div>
-            <h3>Never touch the originals</h3>
-            <p>
-              No renames. No moves. No edits. Your selects live in a per-project SQLite database; export only ever
-              <em>copies</em> a chosen original into a new folder. The library you came in with is the library you leave
-              with.
-            </p>
-          </article>
-        </div>
-      </section>
-
-      <!-- ───────────────────────── how ───────────────────────── -->
-      <section class="section how" id="how">
-        <div class="section-head reveal">
-          <span class="kicker">The pipeline</span>
-          <h2>Four passes, then you <em>browse.</em></h2>
+          <span class="kicker">A walk through the desk</span>
+          <h2>Five screens, <em>one thread.</em></h2>
           <p class="section-sub">
-            Point Atelier at a folder. It indexes once — resumable, offline after the first model download — then you
-            review in the browser at <code>localhost:5050</code>.
-          </p>
-        </div>
-        <ol class="pipeline">
-          <li class="reveal">
-            <span class="ph">Index</span>
-            <h3>Detect &amp; embed</h3>
-            <p>
-              RetinaFace detection + ArcFace 512-d face embeddings, quality-gated and EXIF-upright, plus a DINOv2 scene
-              embedding and full-res sharpness / exposure. Resumable.
-            </p>
-          </li>
-          <li class="reveal">
-            <span class="ph">People</span>
-            <h3>Cluster into persons</h3>
-            <p>
-              HDBSCAN over the face embeddings with a centroid-merge pass turns thousands of faces into a handful of
-              people you can name.
-            </p>
-          </li>
-          <li class="reveal">
-            <span class="ph">Series</span>
-            <h3>Group the bursts</h3>
-            <p>
-              EXIF capture time + scene embedding stitch near-identical frames into a single burst, so the keeper-pick
-              is made across the right set.
-            </p>
-          </li>
-          <li class="reveal">
-            <span class="ph">Score</span>
-            <h3>Pick the keeper</h3>
-            <p>
-              One MediaPipe pass reads per-eye blink, head pose, gaze and a genuine-vs-posed smile; numpy reads
-              sharpness, exposure, colour and composition. Each frame is then scored <em>per intent</em> — group photos
-              stay eyes-strict, candids let a great moment beat a blink — so the keeper per burst rises to the top.
-            </p>
-          </li>
-        </ol>
-      </section>
-
-      <!-- ───────────────────────── demo ───────────────────────── -->
-      <section class="section demo-section" id="demo">
-        <div class="section-head reveal">
-          <span class="kicker">Live demo · no install</span>
-          <h2>This is the <em>review desk.</em></h2>
-          <p class="section-sub">
-            A faithful, in-browser slice of Atelier's Review&nbsp;/&nbsp;cull view, on sample bursts. Click a frame, or
-            use the keyboard — it responds exactly like the real thing.
+            No marketing mockups — these are the actual app, on a real wedding shoot. Tap any frame to see it full size.
           </p>
         </div>
 
-        <div
-          class="demo-shell reveal"
-          id="cull"
-          tabindex="0"
-          aria-label="Interactive culling demo. Click to enable keyboard."
-        >
-          <div class="demo-topbar">
-            <div class="demo-title">
-              <svg viewBox="0 0 32 32" width="18" height="18" aria-hidden="true">
-                <circle cx="16" cy="16" r="9" fill="none" stroke="currentColor" stroke-width="1.6" />
-              </svg>
-              Review · <span id="projName">demo · "wedding"</span>
-            </div>
-            <div class="demo-count" id="rvCount">—</div>
-            <div class="demo-kbd-state" id="kbdState" title="Click the desk to control with the keyboard">
-              <span class="dot"></span><span id="kbdLabel">click to focus</span>
-            </div>
-          </div>
+        <div class="thread" aria-hidden="true"></div>
 
-          <div class="demo-progress"><i id="rvProgress"></i></div>
-
-          <div class="demo-body">
-            <!-- stage -->
-            <figure class="demo-stage" id="rvStage">
-              <div class="stage-empty">—</div>
-            </figure>
-
-            <!-- inspector -->
-            <aside class="demo-inspector" id="rvInspector"></aside>
-          </div>
-
-          <!-- filmstrip -->
-          <div class="demo-strip" id="rvStrip" role="listbox" aria-label="Burst frames"></div>
-
-          <!-- buckets + actions -->
-          <div class="demo-foot">
-            <div class="demo-buckets" id="rvBuckets"></div>
-            <div class="demo-actions">
-              <button class="btn-mini" id="rvPrev" aria-label="Previous burst">← burst</button>
-              <button class="btn-mini" id="rvStar">☆ Add to print list</button>
-              <button class="btn-mini" id="rvNext" aria-label="Next burst">burst →</button>
-            </div>
-          </div>
-        </div>
-
-        <!-- print-list payoff + key legend -->
-        <div class="demo-aside reveal">
-          <div class="printlist">
-            <div class="printlist-head"><span>★ Print list</span><b id="plCount">0</b></div>
-            <div class="printlist-grid" id="plGrid">
-              <p class="printlist-empty">Star frames in the desk above — your keepers collect here.</p>
-            </div>
-            <p class="printlist-note">
-              In Atelier, <em>Export</em> copies each starred original into <code>./print_exports/</code>. Nothing else
-              moves.
+        <!-- 1 · review desk -->
+        <article class="panel l reveal" style="--focal: 78% 50%">
+          <span class="bead" aria-hidden="true"></span>
+          <figure class="panel-shot" data-full="assets/shots/review-desk.webp">
+            <img
+              src="assets/shots/review-desk.webp"
+              alt="Review desk: a burst on the stage with frame-quality bars (group, sharpness, exposure) and bucket chips."
+              loading="lazy"
+              decoding="async"
+              width="3200"
+              height="1702"
+            />
+          </figure>
+          <div class="panel-copy">
+            <span class="kicker">Burst-aware picks</span>
+            <h3>Every burst, one keeper.</h3>
+            <p>
+              Frames gathered back into the moment they came from, then scored <em>per intent</em> — group, candid,
+              moment. The keeper rises; you see exactly why.
             </p>
           </div>
+        </article>
 
-          <div class="keymap">
-            <h4>Keyboard</h4>
-            <ul>
-              <li><kbd>←</kbd><kbd>→</kbd><span>step bursts</span></li>
-              <li><kbd>↑</kbd><kbd>↓</kbd><span>move within the burst</span></li>
-              <li><kbd>Space</kbd><span>★ add / remove from print list</span></li>
-              <li><kbd>G</kbd><kbd>C</kbd><kbd>A</kbd><span>tag Group / Candid / Striking</span></li>
-              <li><kbd>1</kbd>–<kbd>9</kbd><span>drop into a bucket</span></li>
-              <li><kbd>X</kbd><span>skip to next burst</span></li>
-            </ul>
-            <p class="keymap-note">Shift-click a frame to range-star a run of keepers.</p>
+        <!-- 2 · people shelf -->
+        <article class="panel r reveal" style="--focal: 50% 30%">
+          <span class="bead" aria-hidden="true"></span>
+          <figure class="panel-shot" data-full="assets/shots/people-shelf.webp">
+            <img
+              src="assets/shots/people-shelf.webp"
+              alt="People view: a grid of face crops grouped into named people, each with a photo count."
+              loading="lazy"
+              decoding="async"
+              width="3200"
+              height="1702"
+            />
+          </figure>
+          <div class="panel-copy">
+            <span class="kicker">Faces, sorted</span>
+            <h3>Everyone on one shelf.</h3>
+            <p>
+              12,626 faces become a handful of people you can name. Merge, split, or reject a stray — your fixes outlive
+              the next re-cluster.
+            </p>
           </div>
-        </div>
-      </section>
+        </article>
 
-      <!-- ───────────────────────── features ───────────────────────── -->
-      <section class="section features" id="features">
-        <div class="section-head reveal">
-          <span class="kicker">What's in the box</span>
-          <h2>A culling tool, <em>not</em> a viewer.</h2>
-          <p class="section-sub">
-            Every frame is read on dozens of signals — the strongest become picks, the telling ones become flags you can
-            trust.
-          </p>
-        </div>
+        <!-- 3 · face detail -->
+        <article class="panel l reveal" style="--focal: 35% 50%">
+          <span class="bead" aria-hidden="true"></span>
+          <figure class="panel-shot" data-full="assets/shots/face-detail.webp">
+            <img
+              src="assets/shots/face-detail.webp"
+              alt="Face detail: a face crop beside plain-language bars for sharpness, eyes open, smile and frontality."
+              loading="lazy"
+              decoding="async"
+              width="3200"
+              height="1702"
+            />
+          </figure>
+          <div class="panel-copy">
+            <span class="kicker">Reads every frame</span>
+            <h3>Eyes, gaze, smile, sharpness.</h3>
+            <p>
+              One MediaPipe pass reads per-eye blink, head pose, gaze and a genuine-vs-posed smile; numpy reads the
+              rest. Shown as bars you can actually read.
+            </p>
+          </div>
+        </article>
+
+        <!-- 4 · run console -->
+        <article class="panel r reveal" style="--focal: 50% 28%">
+          <span class="bead" aria-hidden="true"></span>
+          <figure class="panel-shot" data-full="assets/shots/run-console.webp">
+            <img
+              src="assets/shots/run-console.webp"
+              alt="Run console: four pipeline phases and a live grid of faces found, 12,626 and counting."
+              loading="lazy"
+              decoding="async"
+              width="3200"
+              height="1702"
+            />
+          </figure>
+          <div class="panel-copy">
+            <span class="kicker">Resumable runs</span>
+            <h3>Point it at a drive. Walk away.</h3>
+            <p>
+              Index 20,000 frames off an external disk — it parks a corrupt file instead of crashing, streams progress
+              live, and picks up exactly where it stopped.
+            </p>
+          </div>
+        </article>
+
+        <!-- 5 · buckets -->
+        <article class="panel l reveal" style="--focal: 50% 62%">
+          <span class="bead" aria-hidden="true"></span>
+          <figure class="panel-shot" data-full="assets/shots/buckets.webp">
+            <img
+              src="assets/shots/buckets.webp"
+              alt="Buckets view: named collections — Print list, Socials, Album, Candids, Family — over a grid of keepers."
+              loading="lazy"
+              decoding="async"
+              width="3200"
+              height="1702"
+            />
+          </figure>
+          <div class="panel-copy">
+            <span class="kicker">Your cut</span>
+            <h3>Buckets are yours.</h3>
+            <p>
+              The print list is just your default bucket — <kbd>Space</kbd> drops the keeper in. Make your own; a photo
+              lives in many. Export copies originals out — nothing else moves.
+            </p>
+          </div>
+        </article>
+
+        <!-- what it reads, in one strip -->
         <div class="feat-chips reveal" aria-label="What Atelier reads from each frame">
           <span class="fc-label">reads</span><span class="fc">eyes open</span><span class="fc">eye contact</span
           ><span class="fc">genuine smile</span><span class="fc">head pose</span><span class="fc">sharpness</span
@@ -320,112 +258,6 @@
           ><span class="fc warn">blown</span><span class="fc warn">crushed</span><span class="fc warn">colour cast</span
           ><span class="fc warn">tilted</span><span class="fc warn">busy bg</span
           ><span class="fc warn">near-duplicate</span>
-        </div>
-        <div class="feat-grid">
-          <article class="feat reveal">
-            <span class="feat-i">◍</span>
-            <h3>By person — and by pair</h3>
-            <p>
-              A people sidebar that scrolls clean through thousands of faces. Rename, merge, split — or reject a stray
-              face and let Atelier surface the others likely mis-filed with it. Then review by who's in frame: solo,
-              with others, or two together.
-            </p>
-          </article>
-          <article class="feat reveal">
-            <span class="feat-i">∿</span>
-            <h3>Burst-aware picks</h3>
-            <p>
-              Frames gathered back into the burst they came from — by capture time and scene — then six keeper picks:
-              <em>group</em>, <em>everyone</em>, <em>smile</em>, <em>candid</em>, <em>moment</em>, <em>aesthetic</em>.
-              Switch on the ones you cull by.
-            </p>
-          </article>
-          <article class="feat reveal">
-            <span class="feat-i">◉</span>
-            <h3>Reads the whole frame</h3>
-            <p>
-              Per-eye blink, head pose, gaze and a Duchenne smile from one MediaPipe pass; sharpness, exposure, colour
-              and composition in numpy. Plain tags — "7/8 eyes open", "eye&nbsp;contact" — and honest flags for the
-              blown, tilted, busy or near-duplicate.
-            </p>
-          </article>
-          <article class="feat reveal">
-            <span class="feat-i">⚖</span>
-            <h3>Context-aware, not brittle</h3>
-            <p>
-              A blink no longer nukes a frame. Group photos weight eyes strictly; moments stay soft, so a real moment
-              beats a technically-clean dud. Every pick shows its reasons.
-            </p>
-          </article>
-          <article class="feat reveal">
-            <span class="feat-i">◑</span>
-            <h3>Tunable, in plain words</h3>
-            <p>
-              Eleven dials in human language — detection confidence, face size, how tight a cluster, how close a burst.
-              Change one and only the passes it touches re-run; your names and picks ride along.
-            </p>
-          </article>
-          <article class="feat reveal">
-            <span class="feat-i">✦</span>
-            <h3>Learns your taste</h3>
-            <p>
-              Rate the auto-picks, or just keep what you keep — a local model learns from your own choices and re-ranks.
-              Warm-started from the heuristic, so it only ever helps. Nothing leaves the machine.
-            </p>
-          </article>
-          <article class="feat reveal">
-            <span class="feat-i">▤</span>
-            <h3>Buckets &amp; print list</h3>
-            <p>
-              The print list is just your default bucket — <kbd>Space</kbd> drops the keeper in. Make your own
-              ("Socials", "Album", "Reject"); a photo lives in many. Tag from the desk, or drop everyone a person is in
-              with one click.
-            </p>
-          </article>
-          <article class="feat reveal">
-            <span class="feat-i">⤓</span>
-            <h3>Portable, private projects</h3>
-            <p>
-              Each project is one SQLite file with thumbnails baked in. Export a self-contained <code>.atelier</code>
-              bundle and open it on another machine; pin, archive, or delete. Originals never move.
-            </p>
-          </article>
-          <article class="feat reveal">
-            <span class="feat-i">↻</span>
-            <h3>Resumable runs</h3>
-            <p>
-              Index a 20,000-frame shoot off an external drive and walk away — it picks up where it stopped, parks a
-              corrupt file instead of crashing, and a clean-up re-run keeps every pick. Per-phase progress and logs
-              stream live; the history survives a restart.
-            </p>
-          </article>
-        </div>
-      </section>
-
-      <!-- ───────────────────────── people / faces ───────────────────────── -->
-      <section class="section people" id="people">
-        <div class="people-grid">
-          <div class="people-copy reveal">
-            <span class="kicker">Faces, sorted</span>
-            <h2>Everyone, on <em>one shelf.</em></h2>
-            <p>
-              insightface — SCRFD/RetinaFace detection with ArcFace embeddings — separates identities far better than
-              the old MTCNN+FaceNet stacks (same-person cosine ~0.98 vs different ~0.15). Fewer junk clusters, fewer
-              jewelry-and-hands false positives.
-            </p>
-            <p>
-              Tick a face, choose <em>Merge into…</em> or <em>Split out</em>. Your call outlives the algorithm: every
-              manual fix is re-applied after the next HDBSCAN run.
-            </p>
-            <a
-              class="btn btn-ghost"
-              href="https://github.com/bharathksunil/atelier#face-engine-detection--recognition"
-              target="_blank"
-              rel="noopener"
-              >On the face engine ↗</a
-            >
-          </div>
-          <div class="people-shelf reveal" id="peopleShelf" aria-hidden="true"></div>
         </div>
       </section>
 
@@ -531,18 +363,23 @@
           <a href="https://github.com/bharathksunil/atelier/blob/main/LICENSE" target="_blank" rel="noopener"
             >MIT License</a
           >
-          <a href="#demo">Live demo</a>
+          <a href="#tour">The tour</a>
         </nav>
       </div>
       <div class="footer-bottom">
         <span>Runs on your machine. Always has.</span>
-        <span>Demo imagery via Lorem&nbsp;Picsum &amp; Pravatar · not affiliated.</span>
+        <span>Screens from a real shoot · faces blurred for guests' privacy.</span>
       </div>
     </footer>
 
+    <!-- ───────────────────────── lightbox ───────────────────────── -->
+    <div class="lightbox" id="lightbox" hidden>
+      <button class="lightbox-close" id="lightboxClose" aria-label="Close">&times;</button>
+      <img id="lightboxImg" alt="" />
+    </div>
+
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-    <script src="js/demo.js" defer></script>
     <script src="js/site.js" defer></script>
   </body>
 </html>
